@@ -1,0 +1,99 @@
+# Default values for grepmind-backend
+# This is a YAML-formatted file.
+
+replicaCount: 2
+
+image:
+  repository: grepmind/backend
+  pullPolicy: Always
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: "grepmind-backend"
+
+service:
+  type: ClusterIP
+  port: 5000
+  targetPort: 5000
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Environment variables
+env:
+  - name: NODE_ENV
+    value: "production"
+  - name: PORT
+    value: "5000"
+  - name: DATABASE_URL
+    value: "postgresql://grepmind:grepmind123@grepmind-postgres:5432/grepmind_db"
+  - name: REDIS_URL
+    value: "redis://grepmind-redis:6379"
+  - name: CORS_ORIGIN
+    value: "http://grepmind.local"
+  - name: JWT_SECRET
+    value: "your-super-secret-jwt-key-change-in-production"
+  - name: RATE_LIMIT_WINDOW_MS
+    value: "900000"
+  - name: RATE_LIMIT_MAX_REQUESTS
+    value: "100"
+
+# Secrets (for sensitive data)
+secrets:
+  enabled: true
+  name: grepmind-backend-secrets
+  data:
+    DATABASE_URL: "postgresql://grepmind:grepmind123@grepmind-postgres:5432/grepmind_db"
+    JWT_SECRET: "your-super-secret-jwt-key-change-in-production"
+    REDIS_URL: "redis://grepmind-redis:6379"
+
+# Health check configuration
+healthCheck:
+  enabled: true
+  path: /health
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 3
+
+# Prisma migration job
+migration:
+  enabled: true
+  image:
+    repository: grepmind/backend
+    tag: latest
+  command: ["npx", "prisma", "migrate", "deploy"]

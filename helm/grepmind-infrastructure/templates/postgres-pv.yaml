@@ -1,0 +1,37 @@
+{{- if .Values.postgresql.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "grepmind-infrastructure.fullname" . }}-postgres-pv
+  labels:
+    {{- include "grepmind-infrastructure.labels" . | nindent 4 }}
+    component: postgres
+spec:
+  capacity:
+    storage: {{ .Values.postgresql.persistence.size }}
+  accessModes:
+    {{- toYaml .Values.postgresql.persistence.accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.postgresql.persistence.storageClass }}
+  nfs:
+    server: {{ .Values.global.nfsServer }}
+    path: {{ .Values.postgresql.persistence.nfsPath }}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "grepmind-infrastructure.fullname" . }}-postgres-pvc
+  labels:
+    {{- include "grepmind-infrastructure.labels" . | nindent 4 }}
+    component: postgres
+spec:
+  accessModes:
+    {{- toYaml .Values.postgresql.persistence.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.postgresql.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.postgresql.persistence.size }}
+  volumeName: {{ include "grepmind-infrastructure.fullname" . }}-postgres-pv
+{{- end }}

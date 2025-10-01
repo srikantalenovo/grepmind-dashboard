@@ -1,0 +1,37 @@
+{{- if .Values.redis.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: {{ include "grepmind-infrastructure.fullname" . }}-redis-pv
+  labels:
+    {{- include "grepmind-infrastructure.labels" . | nindent 4 }}
+    component: redis
+spec:
+  capacity:
+    storage: {{ .Values.redis.persistence.size }}
+  accessModes:
+    {{- toYaml .Values.redis.persistence.accessModes | nindent 4 }}
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: {{ .Values.redis.persistence.storageClass }}
+  nfs:
+    server: {{ .Values.global.nfsServer }}
+    path: {{ .Values.redis.persistence.nfsPath }}
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "grepmind-infrastructure.fullname" . }}-redis-pvc
+  labels:
+    {{- include "grepmind-infrastructure.labels" . | nindent 4 }}
+    component: redis
+spec:
+  accessModes:
+    {{- toYaml .Values.redis.persistence.accessModes | nindent 4 }}
+  storageClassName: {{ .Values.redis.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.redis.persistence.size }}
+  volumeName: {{ include "grepmind-infrastructure.fullname" . }}-redis-pv
+{{- end }}

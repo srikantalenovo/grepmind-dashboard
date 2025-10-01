@@ -1,0 +1,19 @@
+apiVersion: v2
+name: grepmind-infrastructure
+description: Infrastructure components for GrepMind Dashboard (PostgreSQL and Redis)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies: []
+
+keywords:
+  - postgresql
+  - redis
+  - database
+  - cache
+  - nfs
+
+maintainers:
+  - name: MiniMax Agent
+    email: support@minimax.com

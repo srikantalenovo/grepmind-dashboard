@@ -1,0 +1,31 @@
+{
+  "name": "grepmind-dashboard",
+  "version": "1.0.0",
+  "description": "Advanced Kubernetes Dashboard with Real-time Monitoring",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && npm run dev",
+    "build": "npm run build:frontend && npm run build:backend",
+    "build:frontend": "cd frontend && npm run build",
+    "build:backend": "cd backend && npm run build",
+    "start": "npm run start:backend",
+    "start:backend": "cd backend && npm start",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "db:migrate": "cd backend && npx prisma migrate deploy",
+    "db:generate": "cd backend && npx prisma generate",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "cd backend && npm test",
+    "test:frontend": "cd frontend && npm test"
+  },
+  "workspaces": ["frontend", "backend"],
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["kubernetes", "dashboard", "monitoring", "react", "nodejs"],
+  "author": "MiniMax Agent",
+  "license": "MIT"
+}

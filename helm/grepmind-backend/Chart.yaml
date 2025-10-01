@@ -1,0 +1,19 @@
+apiVersion: v2
+name: grepmind-backend
+description: Backend service for GrepMind Dashboard
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies: []
+
+keywords:
+  - backend
+  - nodejs
+  - express
+  - prisma
+  - websocket
+
+maintainers:
+  - name: MiniMax Agent
+    email: support@minimax.com

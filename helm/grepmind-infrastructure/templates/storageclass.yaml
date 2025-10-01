@@ -1,0 +1,12 @@
+{{- if .Values.nfsStorageClass.enabled }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.nfsStorageClass.name }}
+  labels:
+    {{- include "grepmind-infrastructure.labels" . | nindent 4 }}
+provisioner: {{ .Values.nfsStorageClass.provisioner }}
+reclaimPolicy: {{ .Values.nfsStorageClass.reclaimPolicy }}
+volumeBindingMode: {{ .Values.nfsStorageClass.volumeBindingMode }}
+allowVolumeExpansion: true
+{{- end }}

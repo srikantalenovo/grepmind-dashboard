@@ -1,0 +1,48 @@
+{{- if .Values.migration.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "grepmind-backend.fullname" . }}-migration
+  labels:
+    {{- include "grepmind-backend.labels" . | nindent 4 }}
+    component: migration
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  template:
+    metadata:
+      labels:
+        {{- include "grepmind-backend.selectorLabels" . | nindent 8 }}
+        component: migration
+    spec:
+      restartPolicy: Never
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: migration
+        image: "{{ .Values.migration.image.repository }}:{{ .Values.migration.image.tag }}"
+        command: {{- toYaml .Values.migration.command | nindent 8 }}
+        env:
+          {{- if .Values.secrets.enabled }}
+          - name: DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: {{ .Values.secrets.name }}
+                key: DATABASE_URL
+          {{- else }}
+          - name: DATABASE_URL
+            value: "postgresql://grepmind:grepmind123@grepmind-postgres:5432/grepmind_db"
+          {{- end }}
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+  backoffLimit: 3
+{{- end }}

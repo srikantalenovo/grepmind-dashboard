@@ -1,0 +1,401 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  editor
+  viewer
+}
+
+enum ResourceType {
+  pod
+  deployment
+  service
+  node
+  namespace
+  configmap
+  secret
+  ingress
+  persistentvolume
+  persistentvolumeclaim
+}
+
+enum EventSeverity {
+  info
+  warning
+  critical
+}
+
+enum AlertStatus {
+  active
+  resolved
+  silenced
+}
+
+// Authentication & User Management
+model User {
+  id           String         @id @default(cuid())
+  email        String         @unique
+  username     String         @unique
+  passwordHash String
+  firstName    String?
+  lastName     String?
+  role         Role           @default(viewer)
+  isActive     Boolean        @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  
+  // Relationships
+  refreshTokens    RefreshToken[]
+  dashboards       MetricsDashboard[]
+  auditLogs        AuditLog[]
+  alertRules       AlertRule[]
+  
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("refresh_tokens")
+}
+
+// Kubernetes Resources
+model KubernetesCluster {
+  id          String   @id @default(cuid())
+  name        String
+  endpoint    String
+  version     String?
+  nodeCount   Int?
+  isActive    Boolean  @default(true)
+  lastSyncAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships
+  nodes       KubernetesNode[]
+  namespaces  KubernetesNamespace[]
+  metrics     ClusterMetric[]
+  events      ClusterEvent[]
+  
+  @@map("kubernetes_clusters")
+}
+
+model KubernetesNamespace {
+  id          String   @id @default(cuid())
+  clusterId   String
+  name        String
+  status      String   @default("Active")
+  labels      Json?
+  annotations Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships
+  cluster     KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  pods        KubernetesPod[]
+  deployments KubernetesDeployment[]
+  services    KubernetesService[]
+  
+  @@unique([clusterId, name])
+  @@map("kubernetes_namespaces")
+}
+
+model KubernetesNode {
+  id              String   @id @default(cuid())
+  clusterId       String
+  name            String
+  status          String
+  version         String?
+  internalIP      String?
+  externalIP      String?
+  allocatableCpu  String?
+  allocatableMemory String?
+  capacityCpu     String?
+  capacityMemory  String?
+  labels          Json?
+  annotations     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relationships
+  cluster KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  pods    KubernetesPod[]
+  metrics NodeMetric[]
+  
+  @@unique([clusterId, name])
+  @@map("kubernetes_nodes")
+}
+
+model KubernetesPod {
+  id          String   @id @default(cuid())
+  namespaceId String
+  nodeId      String?
+  name        String
+  status      String
+  phase       String
+  restartCount Int     @default(0)
+  containerCount Int   @default(1)
+  labels      Json?
+  annotations Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships
+  namespace KubernetesNamespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade)
+  node      KubernetesNode?     @relation(fields: [nodeId], references: [id])
+  metrics   PodMetric[]
+  
+  @@unique([namespaceId, name])
+  @@map("kubernetes_pods")
+}
+
+model KubernetesDeployment {
+  id              String   @id @default(cuid())
+  namespaceId     String
+  name            String
+  replicas        Int      @default(1)
+  readyReplicas   Int      @default(0)
+  unavailableReplicas Int  @default(0)
+  strategy        String?
+  labels          Json?
+  annotations     Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relationships
+  namespace KubernetesNamespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade)
+  
+  @@unique([namespaceId, name])
+  @@map("kubernetes_deployments")
+}
+
+model KubernetesService {
+  id          String   @id @default(cuid())
+  namespaceId String
+  name        String
+  type        String
+  clusterIP   String?
+  externalIP  String?
+  ports       Json?
+  selector    Json?
+  labels      Json?
+  annotations Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relationships
+  namespace KubernetesNamespace @relation(fields: [namespaceId], references: [id], onDelete: Cascade)
+  
+  @@unique([namespaceId, name])
+  @@map("kubernetes_services")
+}
+
+// Metrics & Monitoring
+model ClusterMetric {
+  id             String   @id @default(cuid())
+  clusterId      String
+  totalNodes     Int
+  totalPods      Int
+  totalServices  Int
+  cpuUsage       Float?
+  memoryUsage    Float?
+  storageUsage   Float?
+  networkIn      Float?
+  networkOut     Float?
+  timestamp      DateTime @default(now())
+  
+  // Relationships
+  cluster KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  
+  @@map("cluster_metrics")
+}
+
+model NodeMetric {
+  id            String   @id @default(cuid())
+  nodeId        String
+  cpuUsage      Float
+  memoryUsage   Float
+  diskUsage     Float?
+  networkIn     Float?
+  networkOut    Float?
+  podCount      Int?
+  timestamp     DateTime @default(now())
+  
+  // Relationships
+  node KubernetesNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  
+  @@map("node_metrics")
+}
+
+model PodMetric {
+  id            String   @id @default(cuid())
+  podId         String
+  cpuUsage      Float
+  memoryUsage   Float
+  networkIn     Float?
+  networkOut    Float?
+  restartCount  Int      @default(0)
+  timestamp     DateTime @default(now())
+  
+  // Relationships
+  pod KubernetesPod @relation(fields: [podId], references: [id], onDelete: Cascade)
+  
+  @@map("pod_metrics")
+}
+
+model NetworkMetric {
+  id         String   @id @default(cuid())
+  sourceIP   String
+  targetIP   String
+  protocol   String
+  port       Int
+  bytesSent  Float
+  bytesRecv  Float
+  latencyMs  Float
+  createdAt  DateTime @default(now())
+  
+  @@map("network_metrics")
+}
+
+// Events & Alerts
+model ClusterEvent {
+  id           String        @id @default(cuid())
+  clusterId    String
+  namespace    String
+  resourceName String
+  resourceType ResourceType
+  eventType    String
+  reason       String
+  message      String
+  severity     EventSeverity @default(info)
+  count        Int          @default(1)
+  firstSeen    DateTime     @default(now())
+  lastSeen     DateTime     @default(now())
+  createdAt    DateTime     @default(now())
+  
+  // Relationships
+  cluster KubernetesCluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+  
+  @@map("cluster_events")
+}
+
+model AlertRule {
+  id          String      @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  query       String      // PromQL query
+  condition   String      // e.g., "> 80"
+  severity    EventSeverity @default(warning)
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  // Relationships
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  alerts Alert[]
+  
+  @@map("alert_rules")
+}
+
+model Alert {
+  id          String      @id @default(cuid())
+  ruleId      String
+  status      AlertStatus @default(active)
+  value       Float
+  message     String
+  startedAt   DateTime    @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime    @default(now())
+  
+  // Relationships
+  rule AlertRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  
+  @@map("alerts")
+}
+
+// Dashboard Configuration
+model MetricsDashboard {
+  id          String         @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  isPublic    Boolean        @default(false)
+  layout      Json?          // Grid layout configuration
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  
+  // Relationships
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  panels MetricsPanel[]
+  
+  @@map("metrics_dashboards")
+}
+
+model MetricsPanel {
+  id           String   @id @default(cuid())
+  dashboardId  String
+  title        String
+  query        String   // PromQL query
+  chartType    String   // line, bar, pie, gauge, etc.
+  position     Json?    // x, y, w, h for grid layout
+  thresholds   Json?    // warning/critical thresholds
+  displayOptions Json?  // colors, labels, etc.
+  refreshInterval Int   @default(30) // seconds
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  
+  // Relationships
+  dashboard MetricsDashboard @relation(fields: [dashboardId], references: [id], onDelete: Cascade)
+  
+  @@map("metrics_panels")
+}
+
+// Audit & Logging
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  resource    String
+  resourceId  String?
+  details     Json?
+  ipAddress   String?
+  userAgent   String?
+  success     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  
+  // Relationships
+  user User? @relation(fields: [userId], references: [id])
+  
+  @@map("audit_logs")
+}
+
+// Application Configuration
+model AppConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("app_config")
+}

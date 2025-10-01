@@ -1,0 +1,18 @@
+apiVersion: v2
+name: grepmind-frontend
+description: Frontend service for GrepMind Dashboard
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies: []
+
+keywords:
+  - frontend
+  - react
+  - vite
+  - nginx
+
+maintainers:
+  - name: MiniMax Agent
+    email: support@minimax.com

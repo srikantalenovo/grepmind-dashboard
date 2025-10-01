@@ -1,0 +1,79 @@
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.redis.fullnameOverride }}
+  labels:
+    {{- include "grepmind-infrastructure.labels" . | nindent 4 }}
+    component: redis
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "grepmind-infrastructure.selectorLabels" . | nindent 6 }}
+      component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "grepmind-infrastructure.selectorLabels" . | nindent 8 }}
+        component: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+          name: redis
+        command:
+        - redis-server
+        - --appendonly
+        - "yes"
+        - --save
+        - "60 1"
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        resources:
+          {{- toYaml .Values.redis.resources | nindent 10 }}
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+      volumes:
+      - name: redis-storage
+        persistentVolumeClaim:
+          claimName: {{ include "grepmind-infrastructure.fullname" . }}-redis-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.redis.fullnameOverride }}
+  labels:
+    {{- include "grepmind-infrastructure.labels" . | nindent 4 }}
+    component: redis
+spec:
+  type: {{ .Values.redis.service.type }}
+  ports:
+  - port: {{ .Values.redis.service.port }}
+    targetPort: redis
+    protocol: TCP
+    name: redis
+  selector:
+    {{- include "grepmind-infrastructure.selectorLabels" . | nindent 4 }}
+    component: redis
+{{- end }}

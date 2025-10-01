@@ -1,0 +1,81 @@
+# Default values for grepmind-infrastructure
+# This is a YAML-formatted file.
+
+global:
+  storageClass: "nfs-storage"
+  nfsServer: "10.0.0.20"
+
+postgresql:
+  enabled: true
+  nameOverride: "postgres"
+  fullnameOverride: "grepmind-postgres"
+  
+  # Database configuration
+  auth:
+    postgresPassword: "postgres123"
+    username: "grepmind"
+    password: "grepmind123"
+    database: "grepmind_db"
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 5432
+  
+  # Persistence configuration
+  persistence:
+    enabled: true
+    storageClass: "nfs-storage"
+    size: 10Gi
+    accessModes:
+      - ReadWriteOnce
+    nfsPath: "/srv/nfs/kubedata/postgres"
+  
+  # Resource limits
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 512Mi
+
+redis:
+  enabled: true
+  nameOverride: "redis"
+  fullnameOverride: "grepmind-redis"
+  
+  # Redis configuration
+  auth:
+    enabled: false
+  
+  # Service configuration
+  service:
+    type: ClusterIP
+    port: 6379
+  
+  # Persistence configuration
+  persistence:
+    enabled: true
+    storageClass: "nfs-storage"
+    size: 5Gi
+    accessModes:
+      - ReadWriteOnce
+    nfsPath: "/srv/nfs/kubedata/redis"
+  
+  # Resource limits
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+# NFS Storage Class configuration
+nfsStorageClass:
+  enabled: true
+  name: "nfs-storage"
+  provisioner: "nfs.csi.k8s.io"
+  reclaimPolicy: Retain
+  volumeBindingMode: Immediate
