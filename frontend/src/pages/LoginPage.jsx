@@ -169,6 +169,29 @@ const LoginPage = () => {
             </button>
           </form>
           
+          {/* Demo Credentials */}
+          <div className="bg-secondary-800/50 border border-secondary-700 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-secondary-200 mb-3 flex items-center">
+              <Shield className="w-4 h-4 mr-2 text-accent-400" />
+              Default Admin Credentials
+            </h3>
+            <div className="space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-secondary-300">Admin User:</span>
+                <button 
+                  type="button"
+                  onClick={() => setFormData({ email: 'admin@grepmind.com', password: 'admin123!@#' })}
+                  className="text-primary-400 hover:text-primary-300 font-mono"
+                >
+                  admin@grepmind.com / admin123!@#
+                </button>
+              </div>
+              <p className="text-xs text-secondary-400 mt-2">
+                💡 Click above to auto-fill login credentials
+              </p>
+            </div>
+          </div>
+          
           {/* Register Link */}
           <div className="text-center">
             <p className="text-secondary-400">

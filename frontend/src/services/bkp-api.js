@@ -43,10 +43,6 @@ const updateStoredTokens = (accessToken, refreshToken) => {
 const apiRequest = async (endpoint, options = {}) => {
   const { accessToken } = getStoredTokens();
   
-  // Debug logging
-  console.log(`🔄 API Request to: ${API_BASE_URL}${endpoint}`);
-  console.log('🔑 Access token present:', !!accessToken);
-  
   const config = {
     headers: {
       'Content-Type': 'application/json',
@@ -59,10 +55,7 @@ const apiRequest = async (endpoint, options = {}) => {
   try {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
     
-    console.log(`📡 Response status: ${response.status} ${response.statusText}`);
-    
     if (response.status === 401) {
-      console.log('🔒 Got 401, attempting token refresh...');
       // Try to refresh token
       const { refreshToken } = getStoredTokens();
       if (refreshToken) {
@@ -76,7 +69,6 @@ const apiRequest = async (endpoint, options = {}) => {
           if (refreshResponse.ok) {
             const { data } = await refreshResponse.json();
             updateStoredTokens(data.accessToken, data.refreshToken);
-            console.log('✅ Token refreshed successfully');
             
             // Retry original request
             config.headers.Authorization = `Bearer ${data.accessToken}`;
@@ -94,14 +86,12 @@ const apiRequest = async (endpoint, options = {}) => {
             return retryData.data;
           }
         } catch (refreshError) {
-          console.error('❌ Token refresh failed:', refreshError);
           // Refresh failed, redirect to login
           localStorage.removeItem('grepmind-auth');
           window.location.href = '/login';
           throw new ApiError('Session expired. Please log in again.');
         }
       } else {
-        console.log('❌ No refresh token available');
         // No refresh token, redirect to login
         window.location.href = '/login';
         throw new ApiError('Please log in to continue.');
@@ -109,13 +99,10 @@ const apiRequest = async (endpoint, options = {}) => {
     }
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ Request failed: ${response.status} ${response.statusText}`, errorText);
       throw new ApiError(`Request failed: ${response.statusText}`, response.status);
     }
     
     const data = await response.json();
-    console.log('📦 Response data:', data);
     
     if (!data.success) {
       throw new ApiError(data.error || 'Request failed');
@@ -123,7 +110,6 @@ const apiRequest = async (endpoint, options = {}) => {
     
     return data.data;
   } catch (error) {
-    console.error(`❌ API Request error for ${endpoint}:`, error);
     if (error instanceof ApiError) {
       throw error;
     }
@@ -270,17 +256,7 @@ export const resourcesApi = {
 
 // Dashboard API
 export const dashboardAPI = {
-  getDashboardOverview: async () => {
-    try {
-      console.log('🔄 Making dashboard API request...');
-      const result = await apiRequest('/dashboard/overview');
-      console.log('✅ Dashboard API response received:', result);
-      return result;
-    } catch (error) {
-      console.error('❌ Dashboard API request failed:', error);
-      throw error;
-    }
-  },
+  getDashboardOverview: () => apiRequest('/dashboard/overview'),
   getClusterInfo: () => apiRequest('/dashboard/cluster-info'),
 };
 

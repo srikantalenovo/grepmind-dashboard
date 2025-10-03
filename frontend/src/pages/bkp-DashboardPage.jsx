@@ -86,22 +86,19 @@ const DashboardPage = () => {
       setError(null);
       
       console.log('🎯 Fetching live dashboard data from cluster...');
+      const response = await dashboardAPI.getDashboardOverview();
       
-      // dashboardAPI.getDashboardOverview() returns the data directly (apiRequest strips the wrapper)
-      const dashboardData = await dashboardAPI.getDashboardOverview();
-      
-      // Validate we have data
-      if (dashboardData && typeof dashboardData === 'object') {
-        setDashboardData(dashboardData);
+      if (response.success) {
+        setDashboardData(response.data);
         setLastUpdated(new Date());
         console.log('✅ Successfully loaded live dashboard data', {
-          nodes: dashboardData.nodes?.total,
-          pods: dashboardData.pods?.total,
-          services: dashboardData.services?.total,
-          deployments: dashboardData.deployments?.total
+          source: response.source,
+          timestamp: response.timestamp,
+          nodes: response.data.nodes?.total,
+          pods: response.data.pods?.total
         });
       } else {
-        throw new Error('Invalid dashboard data received from server');
+        throw new Error(response.error || 'Failed to fetch dashboard data');
       }
     } catch (err) {
       console.error('❌ Failed to fetch dashboard data:', err);
