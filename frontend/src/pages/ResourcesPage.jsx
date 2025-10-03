@@ -21,10 +21,18 @@ const ResourcesPage = () => {
 
   const resourceTypes = [
     { value: 'pods', label: 'Pods', icon: '🔄' },
-    { value: 'services', label: 'Services', icon: '🌐' },
     { value: 'deployments', label: 'Deployments', icon: '📦' },
+    { value: 'services', label: 'Services', icon: '🌐' },
+    { value: 'statefulsets', label: 'StatefulSets', icon: '📊' },
+    { value: 'daemonsets', label: 'DaemonSets', icon: '🔧' },
+    { value: 'jobs', label: 'Jobs', icon: '⚙️' },
+    { value: 'cronjobs', label: 'CronJobs', icon: '⏰' },
     { value: 'configmaps', label: 'ConfigMaps', icon: '⚙️' },
-    { value: 'secrets', label: 'Secrets', icon: '🔐' }
+    { value: 'secrets', label: 'Secrets', icon: '🔐' },
+    { value: 'persistentvolumeclaims', label: 'PersistentVolumeClaims', icon: '💾' },
+    { value: 'ingress', label: 'Ingress', icon: '🌍' },
+    { value: 'helm-releases', label: 'Helm Releases', icon: '⚙️' },
+    { value: 'sparkapplications', label: 'SparkApplications', icon: '⚡' }
   ];
 
   const fetchResources = async () => {
@@ -39,11 +47,41 @@ const ResourcesPage = () => {
         case 'pods':
           data = await resourcesApi.getPods(selectedNamespace);
           break;
+        case 'deployments':
+          data = await resourcesApi.getDeployments(selectedNamespace);
+          break;
         case 'services':
           data = await resourcesApi.getServices(selectedNamespace);
           break;
-        case 'deployments':
-          data = await resourcesApi.getDeployments(selectedNamespace);
+        case 'statefulsets':
+          data = await resourcesApi.getStatefulSets(selectedNamespace);
+          break;
+        case 'daemonsets':
+          data = await resourcesApi.getDaemonSets(selectedNamespace);
+          break;
+        case 'jobs':
+          data = await resourcesApi.getJobs(selectedNamespace);
+          break;
+        case 'cronjobs':
+          data = await resourcesApi.getCronJobs(selectedNamespace);
+          break;
+        case 'configmaps':
+          data = await resourcesApi.getConfigMaps(selectedNamespace);
+          break;
+        case 'secrets':
+          data = await resourcesApi.getSecrets(selectedNamespace);
+          break;
+        case 'persistentvolumeclaims':
+          data = await resourcesApi.getPersistentVolumeClaims(selectedNamespace);
+          break;
+        case 'ingress':
+          data = await resourcesApi.getIngress(selectedNamespace);
+          break;
+        case 'helm-releases':
+          data = await resourcesApi.getHelmReleases(selectedNamespace);
+          break;
+        case 'sparkapplications':
+          data = await resourcesApi.getSparkApplications(selectedNamespace);
           break;
         default:
           data = await resourcesApi.getPods(selectedNamespace);
@@ -121,10 +159,22 @@ const ResourcesPage = () => {
               <select
                 value={selectedResource}
                 onChange={(e) => setSelectedResource(e.target.value)}
-                className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                style={{
+                  backgroundColor: 'white',
+                  color: '#111827'
+                }}
               >
                 {resourceTypes.map((type) => (
-                  <option key={type.value} value={type.value}>
+                  <option 
+                    key={type.value} 
+                    value={type.value}
+                    className="bg-white text-gray-900 hover:bg-gray-50"
+                    style={{
+                      backgroundColor: 'white',
+                      color: '#111827'
+                    }}
+                  >
                     {type.icon} {type.label}
                   </option>
                 ))}
@@ -230,3 +280,4 @@ const ResourcesPage = () => {
 };
 
 export default ResourcesPage;
+

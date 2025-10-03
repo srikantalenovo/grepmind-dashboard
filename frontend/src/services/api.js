@@ -40,8 +40,6 @@ const updateStoredTokens = (accessToken, refreshToken) => {
   }
 };
 
-
-
 const apiRequest = async (endpoint, options = {}) => {
   const { accessToken } = getStoredTokens();
   
@@ -70,7 +68,7 @@ const apiRequest = async (endpoint, options = {}) => {
           
           if (refreshResponse.ok) {
             const { data } = await refreshResponse.json();
-	    updateStoredTokens(data.accessToken, data.refreshToken);
+            updateStoredTokens(data.accessToken, data.refreshToken);
             
             // Retry original request
             config.headers.Authorization = `Bearer ${data.accessToken}`;
@@ -89,7 +87,7 @@ const apiRequest = async (endpoint, options = {}) => {
           }
         } catch (refreshError) {
           // Refresh failed, redirect to login
-	  localStorage.removeItem('grepmind-auth');
+          localStorage.removeItem('grepmind-auth');
           window.location.href = '/login';
           throw new ApiError('Session expired. Please log in again.');
         }
@@ -225,6 +223,26 @@ export const resourcesApi = {
     apiRequest(`/resources/services?namespace=${namespace}`),
   getDeployments: (namespace = 'default') => 
     apiRequest(`/resources/deployments?namespace=${namespace}`),
+  getStatefulSets: (namespace = 'default') => 
+    apiRequest(`/resources/statefulsets?namespace=${namespace}`),
+  getDaemonSets: (namespace = 'default') => 
+    apiRequest(`/resources/daemonsets?namespace=${namespace}`),
+  getJobs: (namespace = 'default') => 
+    apiRequest(`/resources/jobs?namespace=${namespace}`),
+  getCronJobs: (namespace = 'default') => 
+    apiRequest(`/resources/cronjobs?namespace=${namespace}`),
+  getConfigMaps: (namespace = 'default') => 
+    apiRequest(`/resources/configmaps?namespace=${namespace}`),
+  getSecrets: (namespace = 'default') => 
+    apiRequest(`/resources/secrets?namespace=${namespace}`),
+  getPersistentVolumeClaims: (namespace = 'default') => 
+    apiRequest(`/resources/persistentvolumeclaims?namespace=${namespace}`),
+  getIngress: (namespace = 'default') => 
+    apiRequest(`/resources/ingress?namespace=${namespace}`),
+  getHelmReleases: (namespace = 'default') => 
+    apiRequest(`/resources/helm-releases?namespace=${namespace}`),
+  getSparkApplications: (namespace = 'default') => 
+    apiRequest(`/resources/sparkapplications?namespace=${namespace}`),
   getResourceDetails: (resourceType, name, namespace = 'default') => 
     apiRequest(`/resources/${resourceType}/${name}?namespace=${namespace}`),
   getPodLogs: (name, namespace = 'default', options = {}) => {
@@ -265,3 +283,4 @@ export const documentsAPI = {
 // Backward compatibility
 export const authApi = authAPI;
 export const userAPI = userApi;
+

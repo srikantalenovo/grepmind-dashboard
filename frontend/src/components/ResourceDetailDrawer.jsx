@@ -56,10 +56,23 @@ const ResourceDetailDrawer = ({ isOpen, onClose, resource, resourceType, namespa
         namespace,
         { lines: 100 }
       );
-      setLogs(data.logs || 'No logs available');
+      
+      // Handle the structured response from backend
+      if (data && data.data) {
+        setLogs(data.data.logs || 'No logs available');
+        
+        // If there's an error but it's a graceful one, don't set error state
+        if (!data.data.hasLogs && data.data.error) {
+          // This is a graceful "no data" scenario, not an actual error
+          setError(null);
+        }
+      } else {
+        setLogs(data.logs || 'No logs available');
+      }
     } catch (err) {
+      // For actual network/API errors, show error state
       setError(err.message || 'Failed to fetch logs');
-      setLogs('Failed to fetch logs');
+      setLogs('📡 Unable to connect to retrieve logs.\n\nPlease check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -200,9 +213,18 @@ const ResourceDetailDrawer = ({ isOpen, onClose, resource, resourceType, namespa
             </button>
           </div>
         </div>
-        <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto text-sm font-mono max-h-96 whitespace-pre-wrap">
-          <code>{logs}</code>
-        </pre>
+        <div className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-auto text-sm font-mono max-h-96 whitespace-pre-wrap border">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="animate-spin text-2xl mb-2">🔄</div>
+                <div className="text-gray-300">Loading logs...</div>
+              </div>
+            </div>
+          ) : (
+            <code>{logs || 'No logs available'}</code>
+          )}
+        </div>
       </div>
     );
   };
@@ -219,20 +241,23 @@ const ResourceDetailDrawer = ({ isOpen, onClose, resource, resourceType, namespa
     if (error) {
       return (
         <div className="text-center py-8">
-          <div className="text-red-600 mb-2">❌ Error</div>
-          <p className="text-gray-500">{error}</p>
-          <button
-            onClick={() => {
-              if (activeTab === 'logs') {
-                fetchLogs();
-              } else {
-                fetchResourceDetails();
-              }
-            }}
-            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-          >
-            Try Again
-          </button>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+            <div className="text-red-600 text-4xl mb-4">❌</div>
+            <div className="text-red-800 font-medium mb-2">Unable to load content</div>
+            <p className="text-red-700 text-sm mb-4">{error}</p>
+            <button
+              onClick={() => {
+                if (activeTab === 'logs') {
+                  fetchLogs();
+                } else {
+                  fetchResourceDetails();
+                }
+              }}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+            >
+              🔄 Try Again
+            </button>
+          </div>
         </div>
       );
     }
@@ -316,3 +341,4 @@ const ResourceDetailDrawer = ({ isOpen, onClose, resource, resourceType, namespa
 };
 
 export default ResourceDetailDrawer;
+
