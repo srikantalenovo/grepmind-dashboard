@@ -1,0 +1,132 @@
+# Default values for grepmind-dashboard-backend
+replicaCount: 2
+
+image:
+  repository: srikanta1219/grepmind-dashboard-backend
+  tag: "latest"
+  pullPolicy: Always
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Service Configuration
+service:
+  type: ClusterIP
+  port: 3001
+  targetPort: 3001
+
+# Environment Variables
+env:
+  NODE_ENV: "production"
+  PORT: "3001"
+  POSTGRES_DB: "grepmind"          
+  POSTGRES_USER: "grepmind"        
+  POSTGRES_PASSWORD: "grepmind"  
+  # Database Configuration
+  DATABASE_URL: "postgresql://grepmind:grepmind@grepmind-dashboard-postgresql:5432/grepmind"
+  
+  # JWT Configuration
+  JWT_SECRET: "6F7iwZcIHy8Jw7/tokwCA4Sik91S0oypaebdUmfY1t8="
+  JWT_REFRESH_SECRET: "DplDGs2ouuQwC2Z2HMiK7dSqcRV9QfteL2fXiVoi1F4RtZDmd0r1j7eIV50+6j6LagWN/i4f3Lcw7dbpapAm2Q=="
+  JWT_EXPIRES_IN: "150m"
+  JWT_REFRESH_EXPIRES_IN: "70d"
+  
+  # CORS Configuration
+  CORS_ORIGIN: "http://dashboard.grepmind.com"
+  
+  # Kubernetes Configuration
+  KUBERNETES_NAMESPACE: "grepmind"
+  KUBERNETES_IN_CLUSTER: "true"
+
+# Resource Limits
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Health Checks
+livenessProbe:
+  enabled: false
+  httpGet:
+    path: /api/health
+    port: 3001
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: false
+  httpGet:
+    path: /api/health
+    port: 3001
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Service Account for Kubernetes API Access
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# RBAC Configuration for Kubernetes API Access
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "services", "endpoints", "persistentvolumeclaims", "persistentvolumes", "nodes", "namespaces"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["pods/log"]
+      verbs: ["get", "list"]
+    - apiGroups: ["apps"]
+      resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["extensions", "networking.k8s.io"]
+      resources: ["ingresses"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: [""]
+      resources: ["configmaps", "secrets"]
+      verbs: ["get", "list", "watch"]
+
+# Security Context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1001
+
+# Node Selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Pod Annotations
+podAnnotations: {}
+
+# Pod Labels
+podLabels: {}
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80

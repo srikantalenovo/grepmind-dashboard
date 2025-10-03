@@ -1,0 +1,94 @@
+# Default values for grepmind-dashboard-postgresql
+replicaCount: 1
+
+image:
+  repository: postgres
+  tag: "15-alpine"
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+# PostgreSQL Configuration
+postgresql:
+  auth:
+    postgresPassword: "postgres123!@#"
+    username: "grepmind"
+    password: "grepmind"
+    database: "grepmind"
+  
+# Service Configuration
+service:
+  type: ClusterIP
+  port: 5432
+  targetPort: 5432
+
+# Persistence Configuration
+persistence:
+  enabled: true
+  storageClass: "nfs-storage"
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  annotations: {}
+  # NFS Configuration
+  nfs:
+    server: "10.0.0.20"
+    path: "/srv/nfs/kubedata/postgres"
+
+# Resource Limits
+resources:
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# Node Selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}
+
+# Security Context
+securityContext:
+  fsGroup: 999
+  runAsUser: 999
+  runAsNonRoot: true
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 999
+
+# Health Checks
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+# Environment Variables
+env:
+  POSTGRES_DB: "grepmind"
+  POSTGRES_USER: "grepmind"
+  POSTGRES_PASSWORD: "grepmind"
+  PGDATA: "/var/lib/postgresql/data/pgdata"
+
+# Pod Annotations
+podAnnotations: {}
+
+# Pod Labels
+podLabels: {}

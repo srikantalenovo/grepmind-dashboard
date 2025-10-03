@@ -1,0 +1,45 @@
+{
+  "name": "grepmind-dashboard-frontend",
+  "version": "1.0.0",
+  "description": "GrepMind Dashboard Frontend - Kubernetes Resource Monitoring UI",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "lint:fix": "eslint . --ext js,jsx --fix"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.3",
+    "axios": "^1.6.8",
+    "react-hot-toast": "^2.4.1",
+    "lucide-react": "^0.363.0",
+    "framer-motion": "^11.0.24",
+    "date-fns": "^3.6.0",
+    "react-intersection-observer": "^9.8.2",
+    "react-use": "^17.5.0",
+    "zustand": "^4.5.2",
+    "react-query": "^3.39.3",
+    "yaml": "^2.4.1",
+    "recharts": "^2.12.2"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.1",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.6",
+    "vite": "^5.2.0",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.38",
+    "tailwindcss": "^3.4.3"
+  },
+  "keywords": ["react", "vite", "frontend", "kubernetes", "monitoring", "dashboard"],
+  "author": "MiniMax Agent",
+  "license": "MIT"
+}

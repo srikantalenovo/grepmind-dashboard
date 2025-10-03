@@ -1,0 +1,22 @@
+{
+  "name": "grepmind-dashboard",
+  "version": "1.0.0",
+  "description": "GrepMind Dashboard - Production Kubernetes Monitoring Application",
+  "main": "index.js",
+  "scripts": {
+    "build": "cd frontend && npm run build",
+    "start": "cd backend && npm start",
+    "start:backend": "cd backend && npm start",
+    "build:frontend": "cd frontend && npm run build",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:prod": "docker-compose up -d --build",
+    "helm:install": "./deploy.sh",
+    "helm:uninstall": "./uninstall.sh",
+    "health-check": "./health-check.sh"
+  },
+  "keywords": ["kubernetes", "monitoring", "dashboard", "production", "k8s"],
+  "author": "MiniMax Agent",
+  "license": "MIT"
+}

@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: grepmind_postgres
+    environment:
+      POSTGRES_DB: grepmind
+      POSTGRES_USER: grepmind_user
+      POSTGRES_PASSWORD: grepmind_pass
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grepmind_user -d grepmind"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # OPTIONAL: Comment out this entire service to use OpenAI API instead
+  llama:
+    build:
+      context: ./llama
+      dockerfile: Dockerfile
+    container_name: grepmind_llama
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./models:/models
+    environment:
+      - MODEL_PATH=/models
+      # Use smaller/faster models for better performance:
+      - MODEL_SIZE=3B        # Instead of 7B+ for faster responses
+      - QUANTIZATION=Q4_0    # 4-bit quantization for speed
+      - MAX_CONTEXT=2048     # Smaller context window
+      - THREADS=4            # Adjust based on your CPU cores
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 10s          # Increased timeout for model loading
+      retries: 5            # More retries for slower startup
+      start_period: 60s     # Give model more time to load
+    # Resource limits to prevent system overload
+    deploy:
+      resources:
+        limits:
+          memory: 8G        # Adjust based on your available RAM
+          cpus: '4.0'       # Adjust based on your available CPUs
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: grepmind_backend
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - DATABASE_URL=postgresql://grepmind_user:grepmind_pass@postgres:5432/grepmind
+      
+      # LLAMA CONFIGURATION (comment out if using OpenAI only)
+      - LLAMA_SERVER_URL=http://llama:8080
+      
+      # OPENAI CONFIGURATION (uncomment and set your API key for fastest performance)
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # - USE_OPENAI_FOR_CHAT=true
+      # - OPENAI_MODEL=gpt-4o-mini
+      
+      # PERFORMANCE SETTINGS
+      - EMBEDDING_TIMEOUT=30000    # 30 second timeout for embeddings
+      - LLAMA_TIMEOUT=120000       # 2 minute timeout for Llama responses
+      - LOG_LEVEL=info             # Set to 'debug' for more detailed logs
+      
+      # SECURITY
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - CORS_ORIGIN=http://dashboard.grepmind.com
+      
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Comment out this dependency if using OpenAI API instead of Llama
+      llama:
+        condition: service_healthy
+        
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http = require('http'); const options = { hostname: 'localhost', port: 3001, path: '/health', timeout: 2000 }; const req = http.request(options, (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }); req.on('error', () => process.exit(1)); req.end();"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: grepmind_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - VITE_API_URL=http://dashboard.grepmind.com/api
+    depends_on:
+      backend:
+        condition: service_healthy
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: grepmind_network
+
+# PERFORMANCE OPTIMIZATION NOTES:
+#
+# For FASTEST performance (recommended for testing):
+# 1. Set OPENAI_API_KEY in your environment
+# 2. Uncomment the OpenAI environment variables in backend service
+# 3. Comment out the llama service and its dependency in backend
+# 4. Run: export OPENAI_API_KEY="sk-your-key" && docker-compose up --build
+#
+# For LOCAL-ONLY setup with better performance:
+# 1. Use smaller Llama models (3B instead of 7B+)
+# 2. Enable quantization (Q4_0 or Q8_0)
+# 3. Adjust resource limits based on your hardware
+# 4. Increase timeouts in backend environment

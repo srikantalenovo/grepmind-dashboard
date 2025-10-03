@@ -1,0 +1,16 @@
+apiVersion: v2
+name: grepmind-dashboard-postgresql
+description: PostgreSQL database for GrepMind Dashboard
+type: application
+version: 0.1.0
+appVersion: "15.0"
+keywords:
+  - postgresql
+  - database
+  - grepmind
+home: https://github.com/srikanta1219/grepmind-dashboard
+sources:
+  - https://github.com/srikanta1219/grepmind-dashboard
+maintainers:
+  - name: MiniMax Agent
+    email: admin@grepmind.com

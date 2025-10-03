@@ -1,0 +1,25 @@
+# NFS Storage Class for GrepMind Dashboard
+# This creates the required storage class for NFS-based persistent volumes
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: nfs-storage
+  labels:
+    app.kubernetes.io/name: nfs-storage
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: grepmind-dashboard
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: true
+mountOptions:
+  - nfsvers=4.1
+  - hard
+  - intr
+  - rsize=1048576
+  - wsize=1048576
+  - timeo=600
+  - retrans=2
+parameters:
+  archiveOnDelete: "false"

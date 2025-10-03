@@ -1,0 +1,32 @@
+apiVersion: v2
+name: grepmind-dashboard
+description: Complete GrepMind Dashboard - Kubernetes Resource Monitoring Application
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - kubernetes
+  - monitoring
+  - dashboard
+  - react
+  - nodejs
+  - postgresql
+home: https://github.com/srikanta1219/grepmind-dashboard
+sources:
+  - https://github.com/srikanta1219/grepmind-dashboard
+maintainers:
+  - name: MiniMax Agent
+    email: admin@grepmind.com
+dependencies:
+  - name: grepmind-dashboard-postgresql
+    version: "0.1.0"
+    repository: "file://./postgresql"
+    condition: postgresql.enabled
+  - name: grepmind-dashboard-backend
+    version: "0.1.0"
+    repository: "file://./backend"
+    condition: backend.enabled
+  - name: grepmind-dashboard-frontend
+    version: "0.1.0"
+    repository: "file://./frontend"
+    condition: frontend.enabled
