@@ -8,7 +8,7 @@ set -e
 # Configuration
 DOCKER_REGISTRY="srikanta1219"
 APP_NAME="grepmind-dashboard"
-NAMESPACE="grepmind"
+NAMESPACE="default"
 HELM_RELEASE_NAME="grepmind-dashboard"
 
 # Colors for output
@@ -69,19 +69,18 @@ check_prerequisites() {
 
 # Build Docker images
 build_images() {
-    log "Delete Docker images..."
-    docker rmi -f ${DOCKER_REGISTRY}/${APP_NAME}-backend:latest
-    docker rmi -f ${DOCKER_REGISTRY}/${APP_NAME}-frontend:latest
+    log "Building Docker images..."
+    
     # Build backend image
     log "Building backend image..."
     cd backend
-    docker build --no-cache -t ${DOCKER_REGISTRY}/${APP_NAME}-backend:latest .
+    docker build -t ${DOCKER_REGISTRY}/${APP_NAME}-backend:latest .
     cd ..
     
     # Build frontend image
     log "Building frontend image..."
     cd frontend
-    docker build --no-cache -t ${DOCKER_REGISTRY}/${APP_NAME}-frontend:latest .
+    docker build -t ${DOCKER_REGISTRY}/${APP_NAME}-frontend:latest .
     cd ..
     
     success "Docker images built successfully"
@@ -126,22 +125,18 @@ deploy_helm() {
     log "Deploying with Helm..."
     
     # Deploy PostgreSQL first
-   # log "Deploying PostgreSQL..."
-   # helm upgrade --install ${HELM_RELEASE_NAME}-postgresql ./helm/postgresql \
-   #     --namespace ${NAMESPACE} \
-   #     --create-namespace \
-   #     --wait
+    log "Deploying PostgreSQL..."
+    helm upgrade --install ${HELM_RELEASE_NAME}-postgresql ./helm/postgresql \
+        --namespace ${NAMESPACE} \
+        --create-namespace \
+        --wait
     
     # Wait for PostgreSQL to be ready
-    #log "Waiting for PostgreSQL to be ready..."
-    #kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grepmind-dashboard-postgresql \
-    #    --namespace=${NAMESPACE} --timeout=300s
+    log "Waiting for PostgreSQL to be ready..."
+    kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grepmind-dashboard-postgresql \
+        --namespace=${NAMESPACE} --timeout=300s
     
     # Deploy Backend
-    log "Uninstalling Backend..."
-
-    helm uninstall ${HELM_RELEASE_NAME}-backend --namespace ${NAMESPACE} || echo "${HELM_RELEASE_NAME}-backend not found"
-   
     log "Deploying Backend..."
     helm upgrade --install ${HELM_RELEASE_NAME}-backend ./helm/backend \
         --namespace ${NAMESPACE} \
@@ -154,9 +149,6 @@ deploy_helm() {
         --namespace=${NAMESPACE} --timeout=300s
     
     # Deploy Frontend
-    log "Uninstalling Frontend..."
-    helm uninstall ${HELM_RELEASE_NAME}-frontend --namespace ${NAMESPACE} || echo "${HELM_RELEASE_NAME}-frontend not found"
-    
     log "Deploying Frontend..."
     helm upgrade --install ${HELM_RELEASE_NAME}-frontend ./helm/frontend \
         --namespace ${NAMESPACE} \

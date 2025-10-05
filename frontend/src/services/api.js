@@ -226,6 +226,12 @@ export const userApi = {
     method: 'PUT',
     body: JSON.stringify({ role }),
   }),
+  toggleUserStatus: (userId) => apiRequest(`/user/${userId}/status`, {
+    method: 'PUT',
+  }),
+  deleteUser: (userId) => apiRequest(`/user/${userId}`, {
+    method: 'DELETE',
+  }),
 };
 
 // Resources API
@@ -310,7 +316,195 @@ export const documentsAPI = {
   downloadDocument: (id) => apiRequest(`/documents/${id}/download`),
 };
 
+// ========================================
+// PHASE-2 API ENDPOINTS
+// ========================================
+
+// Resource Manager API
+export const resourceManagerAPI = {
+  // YAML/JSON Editor
+  validateResource: (content, format = 'yaml') => apiRequest('/resource-manager/validate', {
+    method: 'POST',
+    body: JSON.stringify({ content, format }),
+  }),
+  applyResource: (content, format = 'yaml', namespace = 'default', dryRun = false) => 
+    apiRequest('/resource-manager/apply', {
+      method: 'POST',
+      body: JSON.stringify({ content, format, namespace, dryRun }),
+    }),
+
+  // Templates
+  getTemplates: () => apiRequest('/resource-manager/templates'),
+  getTemplate: (id) => apiRequest(`/resource-manager/templates/${id}`),
+
+  // Resource Cloning
+  cloneResource: (sourceNamespace, targetNamespace, resourceType, resourceName, newResourceName) =>
+    apiRequest('/resource-manager/clone', {
+      method: 'POST',
+      body: JSON.stringify({ sourceNamespace, targetNamespace, resourceType, resourceName, newResourceName }),
+    }),
+
+  // Bulk Operations
+  bulkDelete: (resources) => apiRequest('/resource-manager/bulk/delete', {
+    method: 'POST',
+    body: JSON.stringify({ resources }),
+  }),
+
+  // Advanced Search
+  searchResources: (query, resourceTypes, namespaces, labels, annotations, limit) =>
+    apiRequest('/resource-manager/search', {
+      method: 'POST',
+      body: JSON.stringify({ query, resourceTypes, namespaces, labels, annotations, limit }),
+    }),
+};
+
+// Monitoring API
+export const monitoringAPI = {
+  // Metrics
+  getMetricsOverview: () => apiRequest('/monitoring/metrics/overview'),
+  getNodeMetrics: () => apiRequest('/monitoring/metrics/nodes'),
+  getPodMetrics: (namespace = 'default') => apiRequest(`/monitoring/metrics/pods?namespace=${namespace}`),
+
+  // Events
+  getEvents: (namespace, eventType, limit = 50) => {
+    const params = new URLSearchParams();
+    if (namespace) params.append('namespace', namespace);
+    if (eventType) params.append('eventType', eventType);
+    params.append('limit', limit);
+    return apiRequest(`/monitoring/events?${params}`);
+  },
+
+  // Performance Analytics
+  getPerformanceTrends: (timeRange = '1h', metric = 'cpu') =>
+    apiRequest(`/monitoring/performance/trends?timeRange=${timeRange}&metric=${metric}`),
+
+  // Alerts
+  getAlerts: (severity, status = 'active') => {
+    const params = new URLSearchParams();
+    if (severity) params.append('severity', severity);
+    params.append('status', status);
+    return apiRequest(`/monitoring/alerts?${params}`);
+  },
+  createAlertRule: (name, condition, severity, labels, actions) =>
+    apiRequest('/monitoring/alerts/rules', {
+      method: 'POST',
+      body: JSON.stringify({ name, condition, severity, labels, actions }),
+    }),
+
+  // Health
+  getMonitoringHealth: () => apiRequest('/monitoring/health'),
+};
+
+// Workloads API
+export const workloadsAPI = {
+  // Deployments
+  getDeployments: (namespace = 'default') => apiRequest(`/workloads/deployments?namespace=${namespace}`),
+  scaleDeployment: (name, namespace, replicas) => apiRequest(`/workloads/deployments/${name}/scale`, {
+    method: 'POST',
+    body: JSON.stringify({ namespace, replicas }),
+  }),
+  restartDeployment: (name, namespace) => apiRequest(`/workloads/deployments/${name}/restart`, {
+    method: 'POST',
+    body: JSON.stringify({ namespace }),
+  }),
+  rollbackDeployment: (name, namespace, revision) => apiRequest(`/workloads/deployments/${name}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ namespace, revision }),
+  }),
+
+  // Logs
+  getPodLogs: (podName, namespace = 'default', container, lines = 100, since = 3600, follow = false) => {
+    const params = new URLSearchParams();
+    params.append('namespace', namespace);
+    if (container) params.append('container', container);
+    params.append('lines', lines);
+    params.append('since', since);
+    params.append('follow', follow);
+    return apiRequest(`/workloads/logs/${podName}?${params}`);
+  },
+  getPodContainers: (podName, namespace = 'default') =>
+    apiRequest(`/workloads/logs/${podName}/containers?namespace=${namespace}`),
+
+  // Scaling
+  getHPA: (namespace = 'default') => apiRequest(`/workloads/hpa?namespace=${namespace}`),
+  createHPA: (name, namespace, targetRef, minReplicas, maxReplicas, targetCPU) =>
+    apiRequest('/workloads/hpa', {
+      method: 'POST',
+      body: JSON.stringify({ name, namespace, targetRef, minReplicas, maxReplicas, targetCPU }),
+    }),
+
+  // Rollout Strategies
+  getRolloutStrategies: () => apiRequest('/workloads/rollout-strategies'),
+
+  // Health Checks
+  getHealthChecks: (deploymentName, namespace = 'default') =>
+    apiRequest(`/workloads/health-checks/${deploymentName}?namespace=${namespace}`),
+  updateHealthCheck: (deploymentName, namespace, containerName, probeType, probeConfig) =>
+    apiRequest(`/workloads/health-checks/${deploymentName}`, {
+      method: 'PUT',
+      body: JSON.stringify({ namespace, containerName, probeType, probeConfig }),
+    }),
+
+  // Workload Status
+  getWorkloadStatus: (namespace = 'default') => apiRequest(`/workloads/status?namespace=${namespace}`),
+};
+
+// Security API
+export const securityAPI = {
+  // Security Scanning
+  getSecurityOverview: () => apiRequest('/security/scan/overview'),
+  getVulnerabilities: (namespace, severity, limit = 50) => {
+    const params = new URLSearchParams();
+    if (namespace) params.append('namespace', namespace);
+    if (severity) params.append('severity', severity);
+    params.append('limit', limit);
+    return apiRequest(`/security/scan/vulnerabilities?${params}`);
+  },
+  startSecurityScan: (namespace, scanType = 'full', images = []) =>
+    apiRequest('/security/scan/start', {
+      method: 'POST',
+      body: JSON.stringify({ namespace, scanType, images }),
+    }),
+
+  // Compliance
+  getComplianceOverview: () => apiRequest('/security/compliance/overview'),
+  getCISBenchmark: () => apiRequest('/security/compliance/cis-benchmark'),
+  startComplianceCheck: (checkType = 'full', categories = []) =>
+    apiRequest('/security/compliance/check', {
+      method: 'POST',
+      body: JSON.stringify({ checkType, categories }),
+    }),
+
+  // RBAC Audit
+  getRBACaudit: (riskLevel) => {
+    const params = new URLSearchParams();
+    if (riskLevel) params.append('riskLevel', riskLevel);
+    return apiRequest(`/security/rbac/audit?${params}`);
+  },
+  getRoleBindings: (namespace) => {
+    const params = new URLSearchParams();
+    if (namespace) params.append('namespace', namespace);
+    return apiRequest(`/security/rbac/bindings?${params}`);
+  },
+
+  // Network Policies
+  getNetworkPolicies: (namespace) => {
+    const params = new URLSearchParams();
+    if (namespace) params.append('namespace', namespace);
+    return apiRequest(`/security/network-policies?${params}`);
+  },
+  getNetworkPolicyCoverage: (namespace = 'default') =>
+    apiRequest(`/security/network-policies/coverage?namespace=${namespace}`),
+
+  // Security Reports
+  generateSecurityReport: (reportType = 'comprehensive', format = 'json', namespaces = []) =>
+    apiRequest('/security/reports/generate', {
+      method: 'POST',
+      body: JSON.stringify({ reportType, format, namespaces }),
+    }),
+  getSecurityRecommendations: () => apiRequest('/security/recommendations'),
+};
+
 // Backward compatibility
 export const authApi = authAPI;
 export const userAPI = userApi;
-

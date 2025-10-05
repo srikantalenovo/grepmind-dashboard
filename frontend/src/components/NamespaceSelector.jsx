@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { resourcesApi } from '../services/api';
 
-const NamespaceSelector = ({ value, onChange }) => {
+const NamespaceSelector = ({ value, onChange, includeAllOption = false }) => {
   const [namespaces, setNamespaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -15,8 +15,12 @@ const NamespaceSelector = ({ value, onChange }) => {
         
         // Set default namespace if none selected
         if (!value && data.length > 0) {
-          const defaultNs = data.find(ns => ns.name === 'default') || data[0];
-          onChange(defaultNs.name);
+          if (includeAllOption) {
+            onChange('all');
+          } else {
+            const defaultNs = data.find(ns => ns.name === 'default') || data[0];
+            onChange(defaultNs.name);
+          }
         }
       } catch (err) {
         setError(err.message);
@@ -26,14 +30,14 @@ const NamespaceSelector = ({ value, onChange }) => {
     };
 
     fetchNamespaces();
-  }, []);
+  }, [includeAllOption]);
 
   if (loading) {
     return (
       <div className="flex items-center space-x-2">
-        <label className="text-sm font-medium text-gray-700">Namespace:</label>
+        <label className="text-sm font-medium text-secondary-400">Namespace:</label>
         <div className="animate-pulse">
-          <div className="h-8 w-32 bg-gray-200 rounded"></div>
+          <div className="h-8 w-32 bg-secondary-700 rounded"></div>
         </div>
       </div>
     );
@@ -42,37 +46,31 @@ const NamespaceSelector = ({ value, onChange }) => {
   if (error) {
     return (
       <div className="flex items-center space-x-2">
-        <label className="text-sm font-medium text-gray-700">Namespace:</label>
-        <div className="text-sm text-red-600">Error loading namespaces</div>
+        <label className="text-sm font-medium text-secondary-400">Namespace:</label>
+        <div className="text-sm text-error-400">Error loading namespaces</div>
       </div>
     );
   }
 
   return (
     <div className="flex items-center space-x-2">
-      <label className="text-sm font-medium text-gray-700">Namespace:</label>
+      <label className="text-sm font-medium text-secondary-400">Namespace:</label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="block w-48 px-3 py-2 border border-gray-300 rounded-md shadow-sm bg-white text-gray-900 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-        style={{
-          backgroundColor: 'white',
-          color: '#111827'
-        }}
+        className="input-field"
       >
+        {includeAllOption && (
+          <option value="all">📁 All Namespaces</option>
+        )}
         {namespaces.map((namespace) => (
           <option 
             key={namespace.name} 
             value={namespace.name}
-            className="bg-white text-gray-900 hover:bg-gray-50"
-            style={{
-              backgroundColor: 'white',
-              color: '#111827'
-            }}
           >
             📁 {namespace.name}
             {namespace.status && namespace.status !== 'Active' && (
-              <span className="text-gray-500"> ({namespace.status})</span>
+              <span> ({namespace.status})</span>
             )}
           </option>
         ))}

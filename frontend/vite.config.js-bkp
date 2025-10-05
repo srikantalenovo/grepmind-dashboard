@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
 
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -18,22 +19,22 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      '/ws': {
-        target: process.env.VITE_WS_URL || 'ws://dashboard.grepmind.com/ws',
-        ws: true,
-        changeOrigin: true,
-        secure: false,
-      },
     },
-  },  
-
-   build: {
+  },
+  build: {
     outDir: 'dist',
     sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          router: ['react-router-dom'],
+          ui: ['framer-motion', 'lucide-react'],
+        },
+      },
+    },
   },
-  define: {
-    __WS_PROTOCOL__: process.env.VITE_WS_PROTOCOL || 'auto', // custom variable
-    __WS_HOST__: process.env.VITE_WS_HOST || 'dashboard.grepmind.com',
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom'],
   },
 })
-

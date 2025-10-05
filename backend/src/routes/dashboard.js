@@ -5,10 +5,16 @@ import { logger } from '../utils/logger.js';
 
 const router = express.Router();
 
-// Apply authentication to all routes
+// =================================
+// AUTHENTICATED DASHBOARD ENDPOINTS
+// =================================
+// All dashboard endpoints require authentication
+// All authenticated users (admin, editor, viewer) can access monitoring data
+
+// Apply authentication to all dashboard routes
 router.use(authMiddleware);
 
-// Get comprehensive dashboard data
+// Get comprehensive dashboard data - accessible to all authenticated users
 router.get('/overview', authorize(['admin', 'editor', 'viewer']), async (req, res) => {
   try {
     logger.info('🎯 Fetching live dashboard data from Kubernetes cluster...');
@@ -206,7 +212,7 @@ router.get('/overview', authorize(['admin', 'editor', 'viewer']), async (req, re
   }
 });
 
-// Get cluster info
+// Get cluster info - accessible to all authenticated users
 router.get('/cluster-info', authorize(['admin', 'editor', 'viewer']), async (req, res) => {
   try {
     const { k8sApi } = getK8sApis();
@@ -247,5 +253,14 @@ router.get('/cluster-info', authorize(['admin', 'editor', 'viewer']), async (req
     });
   }
 });
+
+// =================================
+// ADDITIONAL PROTECTED ENDPOINTS  
+// =================================
+// Future role-specific endpoints can be added here
+// Example:
+// router.get('/admin/cluster-actions', authorize(['admin']), async (req, res) => { 
+//   // Admin-only cluster management actions
+// });
 
 export default router;

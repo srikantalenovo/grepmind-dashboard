@@ -341,4 +341,3 @@ const ResourceDetailDrawer = ({ isOpen, onClose, resource, resourceType, namespa
 };
 
 export default ResourceDetailDrawer;
-

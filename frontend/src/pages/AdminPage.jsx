@@ -12,10 +12,13 @@ import {
   MoreVertical,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
+import { userApi } from '../services/api';
+import UserModal from '../components/UserModal';
 
 const RoleBadge = ({ role }) => {
   const getRoleColor = (role) => {
@@ -55,8 +58,10 @@ const StatusBadge = ({ isActive }) => (
   </span>
 );
 
-const UserRow = ({ user, onEdit, onToggleStatus, onDelete, currentUserId }) => {
+const UserRow = ({ user, onEdit, onToggleStatus, onDelete, currentUserId, actionLoading = {} }) => {
   const [showActions, setShowActions] = useState(false);
+
+  const isLoading = actionLoading[user.id];
 
   return (
     <motion.tr
@@ -69,13 +74,13 @@ const UserRow = ({ user, onEdit, onToggleStatus, onDelete, currentUserId }) => {
           <div className="flex-shrink-0 h-10 w-10">
             <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary-500 to-accent-500 flex items-center justify-center">
               <span className="text-white font-semibold text-sm">
-                {user.fullName?.charAt(0) || user.username?.charAt(0) || 'U'}
+                {user.name?.charAt(0) || user.email?.charAt(0) || 'U'}
               </span>
             </div>
           </div>
           <div className="ml-4">
             <div className="text-sm font-medium text-secondary-200">
-              {user.fullName || user.username}
+              {user.name || 'No Name'}
             </div>
             <div className="text-sm text-secondary-400">
               {user.email}
@@ -84,7 +89,7 @@ const UserRow = ({ user, onEdit, onToggleStatus, onDelete, currentUserId }) => {
         </div>
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-secondary-400">
-        {user.username}
+        {user.email}
       </td>
       <td className="px-6 py-4 whitespace-nowrap">
         <RoleBadge role={user.role} />
@@ -100,14 +105,20 @@ const UserRow = ({ user, onEdit, onToggleStatus, onDelete, currentUserId }) => {
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
         <div className="relative">
-          <button
-            onClick={() => setShowActions(!showActions)}
-            className="text-secondary-400 hover:text-secondary-200 transition-colors p-1"
-          >
-            <MoreVertical className="w-4 h-4" />
-          </button>
+          {isLoading ? (
+            <div className="flex items-center justify-center p-1">
+              <LoadingSpinner size="sm" />
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowActions(!showActions)}
+              className="text-secondary-400 hover:text-secondary-200 transition-colors p-1"
+            >
+              <MoreVertical className="w-4 h-4" />
+            </button>
+          )}
           
-          {showActions && (
+          {showActions && !isLoading && (
             <div className="absolute right-0 mt-2 w-48 bg-secondary-800 border border-secondary-700 rounded-md shadow-lg z-10">
               <div className="py-1">
                 <button
@@ -168,6 +179,14 @@ const AdminPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedRole, setSelectedRole] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState('all');
+  
+  // Modal states
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
+  const [modalLoading, setModalLoading] = useState(false);
+  
+  // Action loading states
+  const [actionLoading, setActionLoading] = useState({});
 
   const roles = [
     { value: 'all', label: 'All Roles' },
@@ -189,69 +208,23 @@ const AdminPage = () => {
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      setError(null);
       
-      // Simulate API call - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      console.log('🔄 Fetching users from API...');
+      const usersData = await userApi.getAllUsers();
+      console.log('✅ Users loaded:', usersData);
       
-      // Mock data
-      const mockUsers = [
-        {
-          id: '1',
-          username: 'admin',
-          email: 'admin@grepmind.com',
-          fullName: 'System Administrator',
-          role: 'admin',
-          isActive: true,
-          lastLogin: new Date().toISOString(),
-          createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-          activityCount: 150
-        },
-        {
-          id: '2',
-          username: 'john_editor',
-          email: 'john@grepmind.com',
-          fullName: 'John Smith',
-          role: 'editor',
-          isActive: true,
-          lastLogin: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-          createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-          activityCount: 89
-        },
-        {
-          id: '3',
-          username: 'sarah_viewer',
-          email: 'sarah@grepmind.com',
-          fullName: 'Sarah Johnson',
-          role: 'viewer',
-          isActive: true,
-          lastLogin: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
-          createdAt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          activityCount: 42
-        },
-        {
-          id: '4',
-          username: 'mike_inactive',
-          email: 'mike@grepmind.com',
-          fullName: 'Mike Wilson',
-          role: 'viewer',
-          isActive: false,
-          lastLogin: null,
-          createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString(),
-          activityCount: 5
-        }
-      ];
-      
-      setUsers(mockUsers);
+      setUsers(usersData || []);
     } catch (err) {
-      setError('Failed to fetch users');
+      console.error('❌ Failed to fetch users:', err);
+      setError(err.message || 'Failed to fetch users');
     } finally {
       setLoading(false);
     }
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         user.username.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    const matchesSearch = user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchQuery.toLowerCase());
     
     const matchesRole = selectedRole === 'all' || user.role === selectedRole;
@@ -262,20 +235,95 @@ const AdminPage = () => {
     return matchesSearch && matchesRole && matchesStatus;
   });
 
+  const handleCreateUser = () => {
+    setEditingUser(null);
+    setShowUserModal(true);
+  };
+
   const handleEditUser = (user) => {
-    // Implement edit user functionality
-    console.log('Edit user:', user);
+    setEditingUser(user);
+    setShowUserModal(true);
   };
 
-  const handleToggleUserStatus = (user) => {
-    // Implement toggle user status functionality
-    console.log('Toggle status for user:', user);
+  const handleModalSubmit = async (userData) => {
+    try {
+      setModalLoading(true);
+      
+      if (editingUser) {
+        // Update user role
+        console.log('🔄 Updating user role...', { userId: editingUser.id, role: userData.role });
+        await userApi.updateUserRole(editingUser.id, userData.role);
+        console.log('✅ User role updated successfully');
+      } else {
+        // Create new user
+        console.log('🔄 Creating new user...', userData);
+        await userApi.createUser(userData);
+        console.log('✅ User created successfully');
+      }
+      
+      // Refresh users list
+      await fetchUsers();
+      
+      // Close modal
+      setShowUserModal(false);
+      setEditingUser(null);
+    } catch (error) {
+      console.error('❌ User operation failed:', error);
+      alert(error.message || 'Operation failed. Please try again.');
+    } finally {
+      setModalLoading(false);
+    }
   };
 
-  const handleDeleteUser = (user) => {
-    // Implement delete user functionality
-    if (window.confirm(`Are you sure you want to delete user "${user.fullName || user.username}"?`)) {
-      console.log('Delete user:', user);
+  const handleToggleUserStatus = async (user) => {
+    try {
+      setActionLoading(prev => ({ ...prev, [user.id]: 'toggle' }));
+      
+      console.log('🔄 Toggling user status...', { userId: user.id, currentStatus: user.isActive });
+      
+      const updatedUser = await userApi.toggleUserStatus(user.id);
+      console.log('✅ User status toggled successfully', updatedUser);
+      
+      // Refresh users list to show updated status
+      await fetchUsers();
+      
+    } catch (error) {
+      console.error('❌ Failed to toggle user status:', error);
+      alert(error.message || 'Failed to toggle user status');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [user.id]: null }));
+    }
+  };
+
+  const handleDeleteUser = async (user) => {
+    if (!window.confirm(`Are you sure you want to delete user "${user.name || user.email}"?\n\nThis action cannot be undone and will:\n• Delete the user account permanently\n• Remove all user activity logs\n• Revoke all active sessions\n\nType "DELETE" to confirm:`)) {
+      return;
+    }
+    
+    const confirmation = prompt('Type "DELETE" to confirm user deletion:');
+    if (confirmation !== 'DELETE') {
+      alert('User deletion cancelled. You must type "DELETE" exactly to confirm.');
+      return;
+    }
+    
+    try {
+      setActionLoading(prev => ({ ...prev, [user.id]: 'delete' }));
+      
+      console.log('🔄 Deleting user...', { userId: user.id });
+      
+      const result = await userApi.deleteUser(user.id);
+      console.log('✅ User deleted successfully', result);
+      
+      // Refresh users list to remove deleted user
+      await fetchUsers();
+      
+      alert(`User ${user.name || user.email} has been deleted successfully.`);
+      
+    } catch (error) {
+      console.error('❌ Failed to delete user:', error);
+      alert(error.message || 'Failed to delete user');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [user.id]: null }));
     }
   };
 
@@ -321,10 +369,23 @@ const AdminPage = () => {
             Manage users and system permissions
           </p>
         </div>
-        <button className="btn btn-primary flex items-center space-x-2">
-          <UserPlus className="w-4 h-4" />
-          <span>Add User</span>
-        </button>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={fetchUsers}
+            disabled={loading}
+            className="btn btn-secondary flex items-center space-x-2"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+          <button
+            onClick={handleCreateUser}
+            className="btn btn-primary flex items-center space-x-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>Add User</span>
+          </button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -441,7 +502,7 @@ const AdminPage = () => {
                   User
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary-400 uppercase tracking-wider">
-                  Username
+                  Email
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-secondary-400 uppercase tracking-wider">
                   Role
@@ -469,6 +530,7 @@ const AdminPage = () => {
                   onToggleStatus={handleToggleUserStatus}
                   onDelete={handleDeleteUser}
                   currentUserId={currentUser?.id}
+                  actionLoading={actionLoading}
                 />
               ))}
             </tbody>
@@ -488,6 +550,18 @@ const AdminPage = () => {
           </div>
         )}
       </div>
+      
+      {/* User Modal */}
+      <UserModal
+        isOpen={showUserModal}
+        onClose={() => {
+          setShowUserModal(false);
+          setEditingUser(null);
+        }}
+        onSubmit={handleModalSubmit}
+        initialUser={editingUser}
+        isLoading={modalLoading}
+      />
     </div>
   );
 };

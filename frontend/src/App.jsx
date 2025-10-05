@@ -10,6 +10,10 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import DashboardPage from './pages/DashboardPage'
 import ResourcesPage from './pages/ResourcesPage'
+import ResourceManagerPage from './pages/ResourceManagerPage'
+import MonitoringPage from './pages/MonitoringPage'
+import WorkloadsPage from './pages/WorkloadsPage'
+import SecurityPage from './pages/SecurityPage'
 import AdminPage from './pages/AdminPage'
 import ProfilePage from './pages/ProfilePage'
 import LandingPage from './pages/LandingPage'
@@ -167,6 +171,46 @@ function App() {
               <ProtectedRoute requiredRole="viewer">
                 <Layout>
                   <ProfilePage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/resource-manager"
+            element={
+              <ProtectedRoute requiredRole="editor">
+                <Layout>
+                  <ResourceManagerPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoring"
+            element={
+              <ProtectedRoute requiredRole="viewer">
+                <Layout>
+                  <MonitoringPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workloads"
+            element={
+              <ProtectedRoute requiredRole="editor">
+                <Layout>
+                  <WorkloadsPage />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/security"
+            element={
+              <ProtectedRoute requiredRole="editor">
+                <Layout>
+                  <SecurityPage />
                 </Layout>
               </ProtectedRoute>
             }

@@ -4,12 +4,155 @@ import { logger } from '../utils/logger.js';
 
 let wss = null;
 let watchStreams = new Map(); // Track active watch streams
+let monitoringInterval = null; // Track monitoring data interval
+
+// Helper function to get cluster metrics (same as monitoring route)
+async function getClusterMetrics() {
+  try {
+    const { coreApi, appsApi } = getKubernetesClient();
+    
+    // Get basic cluster metrics
+    const [nodesRes, podsRes, deploymentsRes, servicesRes] = await Promise.allSettled([
+      coreApi.listNode(),
+      coreApi.listPodForAllNamespaces(),
+      appsApi.listDeploymentForAllNamespaces(),
+      coreApi.listServiceForAllNamespaces()
+    ]);
+
+    const metrics = {
+      cluster: {
+        nodes: {
+          total: 0,
+          ready: 0,
+          notReady: 0
+        },
+        pods: {
+          total: 0,
+          running: 0,
+          pending: 0,
+          failed: 0,
+          succeeded: 0
+        },
+        deployments: {
+          total: 0,
+          ready: 0,
+          updating: 0
+        },
+        services: {
+          total: 0,
+          clusterIP: 0,
+          nodePort: 0,
+          loadBalancer: 0
+        }
+      },
+      resourceUsage: {
+        cpu: { used: 0, total: 1000, percentage: 0 },
+        memory: { used: 0, total: 1000, percentage: 0 },
+        storage: { used: 0, total: 1000, percentage: 0 }
+      }
+    };
+
+    // Process nodes
+    if (nodesRes.status === 'fulfilled') {
+      const nodes = nodesRes.value.body.items;
+      metrics.cluster.nodes.total = nodes.length;
+      
+      nodes.forEach(node => {
+        const readyCondition = node.status.conditions?.find(c => c.type === 'Ready');
+        if (readyCondition?.status === 'True') {
+          metrics.cluster.nodes.ready++;
+        } else {
+          metrics.cluster.nodes.notReady++;
+        }
+      });
+    }
+
+    // Process pods
+    if (podsRes.status === 'fulfilled') {
+      const pods = podsRes.value.body.items;
+      metrics.cluster.pods.total = pods.length;
+      
+      pods.forEach(pod => {
+        switch (pod.status.phase) {
+          case 'Running': metrics.cluster.pods.running++; break;
+          case 'Pending': metrics.cluster.pods.pending++; break;
+          case 'Failed': metrics.cluster.pods.failed++; break;
+          case 'Succeeded': metrics.cluster.pods.succeeded++; break;
+        }
+      });
+    }
+
+    // Process deployments
+    if (deploymentsRes.status === 'fulfilled') {
+      const deployments = deploymentsRes.value.body.items;
+      metrics.cluster.deployments.total = deployments.length;
+      
+      deployments.forEach(deployment => {
+        const ready = deployment.status.readyReplicas || 0;
+        const desired = deployment.spec.replicas || 0;
+        
+        if (ready === desired && desired > 0) {
+          metrics.cluster.deployments.ready++;
+        } else if (deployment.status.updatedReplicas !== deployment.spec.replicas) {
+          metrics.cluster.deployments.updating++;
+        }
+      });
+    }
+
+    // Process services
+    if (servicesRes.status === 'fulfilled') {
+      const services = servicesRes.value.body.items;
+      metrics.cluster.services.total = services.length;
+      
+      services.forEach(service => {
+        switch (service.spec.type) {
+          case 'ClusterIP': metrics.cluster.services.clusterIP++; break;
+          case 'NodePort': metrics.cluster.services.nodePort++; break;
+          case 'LoadBalancer': metrics.cluster.services.loadBalancer++; break;
+        }
+      });
+    }
+
+    // Calculate resource usage percentages
+    metrics.resourceUsage.cpu.percentage = Math.round((metrics.resourceUsage.cpu.used / metrics.resourceUsage.cpu.total) * 100);
+    metrics.resourceUsage.memory.percentage = Math.round((metrics.resourceUsage.memory.used / metrics.resourceUsage.memory.total) * 100);
+    metrics.resourceUsage.storage.percentage = Math.round((metrics.resourceUsage.storage.used / metrics.resourceUsage.storage.total) * 100);
+
+    return metrics;
+  } catch (error) {
+    logger.error('Error fetching cluster metrics for WebSocket:', error);
+    return null;
+  }
+}
+
+// Broadcast monitoring data to all connected clients
+const broadcastMonitoringData = async () => {
+  if (!wss || wss.clients.size === 0) return;
+  
+  const metrics = await getClusterMetrics();
+  if (!metrics) return;
+  
+  const message = JSON.stringify({
+    type: 'metrics',
+    payload: metrics,
+    timestamp: new Date().toISOString()
+  });
+  
+  wss.clients.forEach((client) => {
+    if (client.readyState === client.OPEN) {
+      client.send(message);
+    }
+  });
+};
 
 export const initializeWebSocket = (server) => {
-  wss = new WebSocketServer({ server });
+  wss = new WebSocketServer({ 
+    server,
+    path: '/ws/monitoring'
+  });
   
   wss.on('connection', (ws, req) => {
-    logger.info('WebSocket client connected');
+    logger.info('WebSocket client connected for monitoring');
     
     ws.on('message', async (message) => {
       try {
@@ -39,9 +182,21 @@ export const initializeWebSocket = (server) => {
       type: 'connected',
       message: 'WebSocket connection established'
     }));
+    
+    // Send initial monitoring data
+    broadcastMonitoringData();
   });
   
-  logger.info('WebSocket server initialized');
+  // Start monitoring data broadcast every 30 seconds
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+  }
+  
+  monitoringInterval = setInterval(() => {
+    broadcastMonitoringData();
+  }, 30000); // 30 seconds
+  
+  logger.info('WebSocket server initialized with monitoring data broadcasting');
 };
 
 const handleWebSocketMessage = async (ws, data) => {
@@ -54,6 +209,11 @@ const handleWebSocketMessage = async (ws, data) => {
       
     case 'unwatch':
       await stopWatching(ws, namespace, resourceType);
+      break;
+      
+    case 'monitoring':
+      // Send current monitoring data immediately
+      await broadcastMonitoringData();
       break;
       
     case 'ping':
@@ -267,5 +427,12 @@ export const cleanupAllWatches = () => {
   });
   
   watchStreams.clear();
-  logger.info('All WebSocket watches cleaned up');
+  
+  // Clear monitoring interval
+  if (monitoringInterval) {
+    clearInterval(monitoringInterval);
+    monitoringInterval = null;
+  }
+  
+  logger.info('All WebSocket watches and monitoring interval cleaned up');
 };

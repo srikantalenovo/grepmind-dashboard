@@ -10,10 +10,10 @@
     "test": "jest",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
+    "db:migrate": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
-    "db:migrate": "prisma migrate deploy",
     "postinstall": "prisma generate"
   },
   "dependencies": {

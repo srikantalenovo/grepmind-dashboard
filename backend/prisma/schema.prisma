@@ -3,7 +3,6 @@ generator client {
   binaryTargets = ["native", "linux-musl"]
 }
 
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
@@ -61,4 +60,61 @@ enum Role {
   viewer
   
   @@map("role")
+}
+
+// Historical Data Models for Monitoring
+model MonitoringMetrics {
+  id          String   @id @default(uuid())
+  timestamp   DateTime @default(now())
+  metricType  String   // 'cpu', 'memory', 'pods', 'nodes'
+  namespace   String?  // null for cluster-wide metrics
+  resourceName String? // node name, pod name, etc.
+  value       Float
+  percentage  Float?
+  unit        String   // 'cores', 'MB', 'count', etc.
+  labels      Json?    // additional metadata
+  createdAt   DateTime @default(now())
+  
+  @@index([timestamp, metricType, namespace])
+  @@index([timestamp, resourceName])
+  @@map("monitoring_metrics")
+}
+
+model MonitoringAggregates {
+  id          String   @id @default(uuid())
+  timestamp   DateTime
+  interval    String   // 'hourly', 'daily', 'monthly'
+  metricType  String
+  namespace   String?
+  resourceName String?
+  avgValue    Float
+  minValue    Float
+  maxValue    Float
+  samples     Int
+  createdAt   DateTime @default(now())
+  
+  @@unique([timestamp, interval, metricType, namespace, resourceName])
+  @@index([timestamp, interval])
+  @@map("monitoring_aggregates")
+}
+
+model MonitoringAlerts {
+  id          String   @id @default(uuid())
+  alertType   String
+  severity    String   // 'low', 'medium', 'high', 'critical'
+  title       String
+  message     String
+  namespace   String?
+  resourceName String?
+  isActive    Boolean  @default(true)
+  firstSeen   DateTime @default(now())
+  lastSeen    DateTime @default(now())
+  resolvedAt  DateTime?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([isActive, severity])
+  @@index([firstSeen, namespace])
+  @@map("monitoring_alerts")
 }

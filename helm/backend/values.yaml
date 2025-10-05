@@ -1,5 +1,5 @@
 # Default values for grepmind-dashboard-backend
-replicaCount: 2
+replicaCount: 1
 
 image:
   repository: srikanta1219/grepmind-dashboard-backend

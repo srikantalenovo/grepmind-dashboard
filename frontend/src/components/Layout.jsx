@@ -11,7 +11,11 @@ import {
   X,
   Home,
   Shield,
-  Layers
+  Layers,
+  FileEdit,
+  BarChart3,
+  Package,
+  Lock
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { cn } from '../utils/cn'
@@ -19,6 +23,10 @@ import { cn } from '../utils/cn'
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: Home, role: 'viewer' },
   { name: 'Resources', href: '/resources', icon: Server, role: 'viewer' },
+  { name: 'Resource Manager', href: '/resource-manager', icon: FileEdit, role: 'editor' },
+  { name: 'Monitoring', href: '/monitoring', icon: BarChart3, role: 'viewer' },
+  { name: 'Workloads', href: '/workloads', icon: Package, role: 'editor' },
+  { name: 'Security', href: '/security', icon: Lock, role: 'editor' },
   { name: 'Admin', href: '/admin', icon: Shield, role: 'admin' },
   { name: 'Profile', href: '/profile', icon: User, role: 'viewer' },
 ]
