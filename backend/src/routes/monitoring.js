@@ -12,6 +12,24 @@ router.use(authMiddleware);
 // HELPER FUNCTIONS
 // ================================
 
+// Safe percentage calculation with NaN protection
+const safePercentage = (used, total) => {
+  if (!total || total <= 0 || !isFinite(used) || !isFinite(total)) return 0;
+  const percentage = (used / total) * 100;
+  return isFinite(percentage) ? Math.min(100, Math.max(0, percentage)) : 0;
+};
+
+// Safe value helper with NaN protection
+const safeValue = (value, defaultValue = 0) => {
+  return isFinite(value) ? value : defaultValue;
+};
+
+// Safe rounding with NaN protection
+const safeRound = (value, decimals = 2) => {
+  if (!isFinite(value)) return 0;
+  return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
+};
+
 // Get real cluster resource usage from Kubernetes metrics server
 async function getClusterResourceUsage() {
   try {
@@ -98,26 +116,26 @@ async function getClusterResourceUsage() {
       storageUsage = (pods.length / Math.max(totalCpuCapacity * 10, 1)) * totalStorageCapacity * 0.3;
     }
     
-    // Calculate percentages
-    const cpuPercentage = totalCpuCapacity > 0 ? Math.min(100, (cpuUsage / totalCpuCapacity) * 100) : 0;
-    const memoryPercentage = totalMemoryCapacity > 0 ? Math.min(100, (memoryUsage / totalMemoryCapacity) * 100) : 0;
-    const storagePercentage = totalStorageCapacity > 0 ? Math.min(100, (storageUsage / totalStorageCapacity) * 100) : 0;
-    
+    // Calculate percentages using global helper functions
+    const cpuPercentage = safePercentage(cpuUsage, totalCpuCapacity);
+    const memoryPercentage = safePercentage(memoryUsage, totalMemoryCapacity);
+    const storagePercentage = safePercentage(storageUsage, totalStorageCapacity);
+
     return {
       cpu: {
-        used: Math.round(cpuUsage * 100) / 100, // Round to 2 decimal places
-        total: Math.round(totalCpuCapacity * 100) / 100,
-        percentage: Math.round(cpuPercentage * 100) / 100
+        used: safeRound(safeValue(cpuUsage), 2),
+        total: safeRound(safeValue(totalCpuCapacity), 2),
+        percentage: safeRound(safeValue(cpuPercentage), 2)
       },
       memory: {
-        used: Math.round(memoryUsage / 1024), // Convert Ki to Mi
-        total: Math.round(totalMemoryCapacity / 1024), // Convert Ki to Mi
-        percentage: Math.round(memoryPercentage * 100) / 100
+        used: Math.round(safeValue(memoryUsage / 1024)), // Convert Ki to Mi
+        total: Math.round(safeValue(totalMemoryCapacity / 1024)), // Convert Ki to Mi
+        percentage: safeRound(safeValue(memoryPercentage), 2)
       },
       storage: {
-        used: Math.round(storageUsage / (1024 * 1024)), // Convert Ki to Gi
-        total: Math.round(totalStorageCapacity / (1024 * 1024)), // Convert Ki to Gi
-        percentage: Math.round(storagePercentage * 100) / 100
+        used: Math.round(safeValue(storageUsage / (1024 * 1024))), // Convert Ki to Gi
+        total: Math.round(safeValue(totalStorageCapacity / (1024 * 1024))), // Convert Ki to Gi
+        percentage: safeRound(safeValue(storagePercentage), 2)
       }
     };
     
@@ -315,9 +333,9 @@ router.get('/metrics/nodes', authorize(['admin', 'editor', 'viewer']), async (re
       const memoryCapacityKi = parseFloat((node.status.capacity?.memory || '8Gi').replace(/[^\d.]/g, ''));
       const memoryCapacityMi = memoryCapacityKi / 1024;
       
-      // Calculate percentages
-      const cpuPercentage = Math.min(100, (cpuUsage / cpuCapacity) * 100);
-      const memoryPercentage = Math.min(100, (memoryUsage / memoryCapacityMi) * 100);
+      // Calculate percentages with NaN protection
+      const cpuPercentage = safePercentage(cpuUsage, cpuCapacity);
+      const memoryPercentage = safePercentage(memoryUsage, memoryCapacityMi);
       
       return {
         name: node.metadata.name,
@@ -415,9 +433,9 @@ router.get('/metrics/pods', authorize(['admin', 'editor', 'viewer']), async (req
       cpuLimit = cpuLimit || 1; // Default to 1 core
       memoryLimit = memoryLimit || 512; // Default to 512Mi
       
-      // Calculate usage percentages
-      const cpuPercentage = Math.min(100, (cpuUsage / cpuLimit) * 100);
-      const memoryPercentage = Math.min(100, (memoryUsage / memoryLimit) * 100);
+      // Calculate usage percentages with NaN protection
+      const cpuPercentage = safePercentage(cpuUsage, cpuLimit);
+      const memoryPercentage = safePercentage(memoryUsage, memoryLimit);
       
       return {
         name: pod.metadata.name,
@@ -578,7 +596,7 @@ router.get('/performance/trends', authorize(['admin', 'editor', 'viewer']), asyn
     const intervals = timeRange === '1h' ? 60 : timeRange === '6h' ? 72 : 144; // Number of data points
     const intervalMs = timeRange === '1h' ? 60000 : timeRange === '6h' ? 300000 : 600000; // Interval in ms
     
-    const baselinePercentage = totalCapacity > 0 ? (currentUsage / totalCapacity) * 100 : 20;
+    const baselinePercentage = safePercentage(currentUsage, totalCapacity) || 20;
     
     for (let i = intervals; i >= 0; i--) {
       const timestamp = new Date(now.getTime() - (i * intervalMs));
@@ -1096,3 +1114,4 @@ router.get('/websocket/health', authorize(['admin', 'editor', 'viewer']), async 
 });
 
 export default router;
+

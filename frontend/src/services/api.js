@@ -1,6 +1,23 @@
 // API service for Kubernetes resources
 const API_BASE_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || 'http://dashboard.grepmind.com/api';
 
+// Request debouncing to prevent excessive API calls
+const requestCache = new Map();
+const REQUEST_DEBOUNCE_TIME = 1000; // 1 second minimum between identical requests
+
+const shouldDebounceRequest = (endpoint) => {
+  const now = Date.now();
+  const lastRequest = requestCache.get(endpoint);
+  
+  if (lastRequest && (now - lastRequest) < REQUEST_DEBOUNCE_TIME) {
+    console.log(`🚦 Request to ${endpoint} debounced (too soon after last request)`);
+    return true;
+  }
+  
+  requestCache.set(endpoint, now);
+  return false;
+};
+
 class ApiError extends Error {
   constructor(message, status) {
     super(message);
@@ -41,6 +58,11 @@ const updateStoredTokens = (accessToken, refreshToken) => {
 };
 
 const apiRequest = async (endpoint, options = {}) => {
+  // Check if we should debounce this request
+  if (shouldDebounceRequest(endpoint)) {
+    throw new Error('Request debounced - too many requests to the same endpoint');
+  }
+  
   const { accessToken } = getStoredTokens();
   
   // Debug logging
@@ -274,20 +296,23 @@ export const resourcesApi = {
   },
 };
 
-// Dashboard API
+// Dashboard API with data sanitization
 export const dashboardAPI = {
   getDashboardOverview: async () => {
     try {
       console.log('🔄 Making dashboard API request...');
       const result = await apiRequest('/dashboard/overview');
       console.log('✅ Dashboard API response received:', result);
-      return result;
+      return sanitizeMetricsData(result);
     } catch (error) {
       console.error('❌ Dashboard API request failed:', error);
       throw error;
     }
   },
-  getClusterInfo: () => apiRequest('/dashboard/cluster-info'),
+  getClusterInfo: async () => {
+    const data = await apiRequest('/dashboard/cluster-info');
+    return sanitizeMetricsData(data);
+  },
 };
 
 export { ApiError };
@@ -358,41 +383,158 @@ export const resourceManagerAPI = {
     }),
 };
 
-// Monitoring API
-export const monitoringAPI = {
-  // Metrics
-  getMetricsOverview: () => apiRequest('/monitoring/metrics/overview'),
-  getNodeMetrics: () => apiRequest('/monitoring/metrics/nodes'),
-  getPodMetrics: (namespace = 'default') => apiRequest(`/monitoring/metrics/pods?namespace=${namespace}`),
+// 🔥 Data sanitization helper to prevent NaN values
+const sanitizeMetricsData = (data) => {
+  if (!data || typeof data !== 'object') return data;
+  
+  const sanitizeValue = (value) => {
+    if (typeof value === 'number') {
+      // Replace NaN, Infinity, -Infinity with 0
+      if (!isFinite(value) || isNaN(value)) {
+        return 0;
+      }
+      return value;
+    }
+    if (typeof value === 'object' && value !== null) {
+      return sanitizeObject(value);
+    }
+    return value;
+  };
+  
+  const sanitizeObject = (obj) => {
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeValue);
+    }
+    
+    const sanitized = {};
+    Object.keys(obj).forEach(key => {
+      sanitized[key] = sanitizeValue(obj[key]);
+    });
+    return sanitized;
+  };
+  
+  return sanitizeObject(data);
+};
 
-  // Events
-  getEvents: (namespace, eventType, limit = 50) => {
+// Monitoring API with data sanitization
+export const monitoringAPI = {
+  // Enhanced Metrics with time range support and sanitization
+  getMetricsOverview: async (timeRange = '1h') => {
+    const data = await apiRequest(`/monitoring/metrics/overview?timeRange=${timeRange}`);
+    return sanitizeMetricsData(data);
+  },
+  getNodeMetrics: async (timeRange = '1h') => {
+    const data = await apiRequest(`/monitoring/metrics/nodes?timeRange=${timeRange}`);
+    return sanitizeMetricsData(data);
+  },
+  getPodMetrics: async (namespace = 'default', timeRange = '1h') => {
+    const params = new URLSearchParams();
+    params.append('namespace', namespace);
+    params.append('timeRange', timeRange);
+    const data = await apiRequest(`/monitoring/metrics/pods?${params}`);
+    return sanitizeMetricsData(data);
+  },
+
+  // NEW: Enhanced time series metrics
+  getTimeSeriesMetrics: async (options = {}) => {
+    const {
+      namespace = 'default',
+      timeRange = '1h', 
+      metrics = ['cpu', 'memory'], 
+      resourceType = 'pods',
+      startTime,
+      endTime
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('namespace', namespace);
+    params.append('timeRange', timeRange);
+    params.append('resourceType', resourceType);
+    params.append('metrics', metrics.join(','));
+    
+    if (startTime) params.append('startTime', startTime);
+    if (endTime) params.append('endTime', endTime);
+    
+    const data = await apiRequest(`/monitoring/metrics/timeseries?${params}`);
+    return sanitizeMetricsData(data);
+  },
+
+  // NEW: Multi-pod metrics for comparison charts
+  getMultiPodMetrics: async (namespace = 'default', timeRange = '1h', podNames = []) => {
+    const params = new URLSearchParams();
+    params.append('namespace', namespace);
+    params.append('timeRange', timeRange);
+    if (podNames.length > 0) {
+      params.append('pods', podNames.join(','));
+    }
+    const data = await apiRequest(`/monitoring/metrics/multipod?${params}`);
+    return sanitizeMetricsData(data);
+  },
+
+  // Add compatibility functions for resources
+  getNamespaces: () => resourcesApi.getNamespaces(),
+  getPods: (namespace = 'default') => resourcesApi.getPods(namespace),
+
+  // Events with time range support
+  getEvents: (namespace, eventType, limit = 50, timeRange = '1h') => {
     const params = new URLSearchParams();
     if (namespace) params.append('namespace', namespace);
     if (eventType) params.append('eventType', eventType);
     params.append('limit', limit);
+    params.append('timeRange', timeRange);
     return apiRequest(`/monitoring/events?${params}`);
   },
 
-  // Performance Analytics
-  getPerformanceTrends: (timeRange = '1h', metric = 'cpu') =>
-    apiRequest(`/monitoring/performance/trends?timeRange=${timeRange}&metric=${metric}`),
+  // Enhanced Performance Analytics with sanitization
+  getPerformanceTrends: async (timeRange = '1h', metric = 'cpu', namespace = null) => {
+    const params = new URLSearchParams();
+    params.append('timeRange', timeRange);
+    params.append('metric', metric);
+    if (namespace) params.append('namespace', namespace);
+    const data = await apiRequest(`/monitoring/performance/trends?${params}`);
+    return sanitizeMetricsData(data);
+  },
 
-  // Alerts
-  getAlerts: (severity, status = 'active') => {
+  // Enhanced Alerts with time range filtering
+  getAlerts: async (severity, status = 'active', timeRange = '1h') => {
     const params = new URLSearchParams();
     if (severity) params.append('severity', severity);
     params.append('status', status);
-    return apiRequest(`/monitoring/alerts?${params}`);
+    params.append('timeRange', timeRange);
+    const data = await apiRequest(`/monitoring/alerts?${params}`);
+    return sanitizeMetricsData(data);
   },
+  
   createAlertRule: (name, condition, severity, labels, actions) =>
     apiRequest('/monitoring/alerts/rules', {
       method: 'POST',
       body: JSON.stringify({ name, condition, severity, labels, actions }),
     }),
 
-  // Health
-  getMonitoringHealth: () => apiRequest('/monitoring/health'),
+  // Enhanced Health with time range
+  getMonitoringHealth: async (timeRange = '1h') => {
+    const data = await apiRequest(`/monitoring/health?timeRange=${timeRange}`);
+    return sanitizeMetricsData(data);
+  },
+
+  // NEW: Resource utilization trends
+  getResourceTrends: async (options = {}) => {
+    const {
+      timeRange = '1h',
+      namespace = 'default',
+      resourceTypes = ['cpu', 'memory', 'storage'],
+      aggregation = 'avg' // avg, max, min
+    } = options;
+    
+    const params = new URLSearchParams();
+    params.append('timeRange', timeRange);
+    params.append('namespace', namespace);
+    params.append('resourceTypes', resourceTypes.join(','));
+    params.append('aggregation', aggregation);
+    
+    const data = await apiRequest(`/monitoring/trends/resources?${params}`);
+    return sanitizeMetricsData(data);
+  },
 };
 
 // Workloads API
@@ -508,3 +650,4 @@ export const securityAPI = {
 // Backward compatibility
 export const authApi = authAPI;
 export const userAPI = userApi;
+

@@ -2,9 +2,150 @@ import { WebSocketServer } from 'ws';
 import { getKubernetesClient, handleK8sError } from '../config/kubernetes.js';
 import { logger } from '../utils/logger.js';
 
+// Helper functions from monitoring routes (moved to global scope)
+const safePercentage = (numerator, denominator) => {
+  if (!denominator || denominator === 0) return 0;
+  const result = (numerator / denominator) * 100;
+  return !isFinite(result) || isNaN(result) ? 0 : result;
+};
+
+const safeValue = (value, defaultValue = 0) => {
+  return (typeof value === 'number' && !isNaN(value) && isFinite(value)) ? value : defaultValue;
+};
+
+const safeRound = (value, decimals = 2) => {
+  const validValue = safeValue(value);
+  return Math.round(validValue * Math.pow(10, decimals)) / Math.pow(10, decimals);
+};
+
 let wss = null;
 let watchStreams = new Map(); // Track active watch streams
 let monitoringInterval = null; // Track monitoring data interval
+
+// Real cluster resource usage calculation (copied from monitoring routes)
+async function getClusterResourceUsage() {
+  try {
+    const { coreApi } = getKubernetesClient();
+    
+    // Get nodes and pods data
+    const [nodesRes, podsRes] = await Promise.allSettled([
+      coreApi.listNode(),
+      coreApi.listPodForAllNamespaces()
+    ]);
+
+    let totalCpuCapacity = 0;
+    let totalMemoryCapacity = 0; // in Ki
+    let totalStorageCapacity = 100 * 1024 * 1024; // Default 100Gi in Ki
+    let cpuUsage = 0;
+    let memoryUsage = 0; // in Ki
+    let storageUsage = 0;
+
+    // Calculate total cluster capacity from nodes
+    if (nodesRes.status === 'fulfilled') {
+      const nodes = nodesRes.value.body.items;
+      
+      nodes.forEach(node => {
+        const allocatable = node.status.allocatable || {};
+        
+        // CPU capacity (e.g., "2" cores)
+        const cpu = allocatable.cpu || '0';
+        totalCpuCapacity += parseFloat(cpu) || 0;
+        
+        // Memory capacity (e.g., "4Gi", "1024Mi", "1048576Ki")
+        const memory = allocatable.memory || '0Ki';
+        if (memory.includes('Gi')) {
+          totalMemoryCapacity += parseFloat(memory.replace('Gi', '')) * 1024 * 1024; // Convert Gi to Ki
+        } else if (memory.includes('Mi')) {
+          totalMemoryCapacity += parseFloat(memory.replace('Mi', '')) * 1024; // Convert Mi to Ki
+        } else if (memory.includes('Ki')) {
+          totalMemoryCapacity += parseFloat(memory.replace('Ki', ''));
+        }
+        
+        // Storage capacity (simplified - using ephemeral-storage or default)
+        const storage = allocatable['ephemeral-storage'] || '100Gi';
+        if (storage.includes('Gi')) {
+          totalStorageCapacity += parseFloat(storage.replace('Gi', '')) * 1024 * 1024; // Convert to Ki
+        }
+      });
+    }
+
+    // Calculate actual usage from pods
+    if (podsRes.status === 'fulfilled') {
+      const pods = podsRes.value.body.items;
+      
+      pods.forEach(pod => {
+        if (pod.status.phase === 'Running' && pod.spec.containers) {
+          pod.spec.containers.forEach(container => {
+            if (container.resources?.requests) {
+              // Sum up CPU requests (e.g., "100m", "0.5")
+              const cpuRequest = container.resources.requests.cpu || '0';
+              if (cpuRequest.includes('m')) {
+                cpuUsage += parseFloat(cpuRequest.replace('m', '')) / 1000; // Convert milliCPU to CPU
+              } else {
+                cpuUsage += parseFloat(cpuRequest) || 0;
+              }
+              
+              // Sum up memory requests (e.g., "128Mi")
+              const memoryRequest = container.resources.requests.memory || '0';
+              if (memoryRequest.includes('Mi')) {
+                memoryUsage += parseFloat(memoryRequest.replace('Mi', '')) * 1024; // Convert Mi to Ki
+              } else if (memoryRequest.includes('Gi')) {
+                memoryUsage += parseFloat(memoryRequest.replace('Gi', '')) * 1024 * 1024; // Convert Gi to Ki
+              }
+            }
+          });
+        }
+      });
+      
+      // Estimate storage usage as a percentage of pod count vs capacity
+      storageUsage = (pods.length / Math.max(totalCpuCapacity * 10, 1)) * totalStorageCapacity * 0.3;
+    }
+    
+    // Calculate percentages using global helper functions
+    const cpuPercentage = safePercentage(cpuUsage, totalCpuCapacity);
+    const memoryPercentage = safePercentage(memoryUsage, totalMemoryCapacity);
+    const storagePercentage = safePercentage(storageUsage, totalStorageCapacity);
+
+    return {
+      cpu: {
+        used: safeRound(safeValue(cpuUsage), 2),
+        total: safeRound(safeValue(totalCpuCapacity), 2),
+        percentage: safeRound(safeValue(cpuPercentage), 2)
+      },
+      memory: {
+        used: Math.round(safeValue(memoryUsage / 1024)), // Convert Ki to Mi
+        total: Math.round(safeValue(totalMemoryCapacity / 1024)), // Convert Ki to Mi
+        percentage: safeRound(safeValue(memoryPercentage), 2)
+      },
+      storage: {
+        used: Math.round(safeValue(storageUsage / (1024 * 1024))), // Convert Ki to Gi
+        total: Math.round(safeValue(totalStorageCapacity / (1024 * 1024))), // Convert Ki to Gi
+        percentage: safeRound(safeValue(storagePercentage), 2)
+      }
+    };
+    
+  } catch (error) {
+    logger.error('Error getting cluster resource usage for WebSocket:', error);
+    // Return reasonable defaults if unable to get real data
+    return {
+      cpu: {
+        used: 0,
+        total: 4,
+        percentage: 0
+      },
+      memory: {
+        used: 0,
+        total: 8192, // 8Gi in Mi
+        percentage: 0
+      },
+      storage: {
+        used: 0,
+        total: 100, // 100Gi
+        percentage: 0
+      }
+    };
+  }
+}
 
 // Helper function to get cluster metrics (same as monitoring route)
 async function getClusterMetrics() {
@@ -45,11 +186,7 @@ async function getClusterMetrics() {
           loadBalancer: 0
         }
       },
-      resourceUsage: {
-        cpu: { used: 0, total: 1000, percentage: 0 },
-        memory: { used: 0, total: 1000, percentage: 0 },
-        storage: { used: 0, total: 1000, percentage: 0 }
-      }
+      resourceUsage: await getClusterResourceUsage()
     };
 
     // Process nodes
@@ -113,11 +250,6 @@ async function getClusterMetrics() {
       });
     }
 
-    // Calculate resource usage percentages
-    metrics.resourceUsage.cpu.percentage = Math.round((metrics.resourceUsage.cpu.used / metrics.resourceUsage.cpu.total) * 100);
-    metrics.resourceUsage.memory.percentage = Math.round((metrics.resourceUsage.memory.used / metrics.resourceUsage.memory.total) * 100);
-    metrics.resourceUsage.storage.percentage = Math.round((metrics.resourceUsage.storage.used / metrics.resourceUsage.storage.total) * 100);
-
     return metrics;
   } catch (error) {
     logger.error('Error fetching cluster metrics for WebSocket:', error);
@@ -131,6 +263,16 @@ const broadcastMonitoringData = async () => {
   
   const metrics = await getClusterMetrics();
   if (!metrics) return;
+  
+  // 🔍 Debug: Log WebSocket metrics being sent
+  logger.info('🔍 WebSocket broadcasting metrics:', {
+    cpuPercentage: metrics.resourceUsage.cpu.percentage,
+    memoryPercentage: metrics.resourceUsage.memory.percentage,
+    cpuUsed: metrics.resourceUsage.cpu.used,
+    cpuTotal: metrics.resourceUsage.cpu.total,
+    memoryUsed: metrics.resourceUsage.memory.used,
+    memoryTotal: metrics.resourceUsage.memory.total
+  });
   
   const message = JSON.stringify({
     type: 'metrics',
@@ -436,3 +578,4 @@ export const cleanupAllWatches = () => {
   
   logger.info('All WebSocket watches and monitoring interval cleaned up');
 };
+

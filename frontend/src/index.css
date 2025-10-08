@@ -90,6 +90,23 @@
   .input-error {
     @apply border-error-500 focus:ring-error-500 focus:border-error-500;
   }
+
+  /* Select/Dropdown field styles */
+  .input-field {
+    @apply w-full px-3 py-2 text-secondary-100 bg-secondary-800/70 border border-secondary-600;
+    @apply rounded-lg transition-all duration-200;
+    @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500;
+    @apply hover:border-secondary-500 hover:bg-secondary-800/80;
+    @apply backdrop-blur-sm;
+  }
+
+  .input-field option {
+    @apply bg-secondary-800 text-secondary-100 py-2;
+  }
+
+  .input-field:disabled {
+    @apply opacity-50 cursor-not-allowed bg-secondary-900/50;
+  }
   
   /* Card styles */
   .card {

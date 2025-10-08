@@ -111,7 +111,14 @@ export const useAuthStore = create(
           return response.accessToken
         } catch (error) {
           console.error('Token refresh failed:', error)
+          // Clear auth and show user-friendly message
           get().clearAuth()
+          
+          // Only show toast if it's not during app initialization
+          if (!get().isLoading) {
+            toast.error('Session expired. Please log in again.')
+          }
+          
           throw error
         }
       },
@@ -130,7 +137,7 @@ export const useAuthStore = create(
           
           // Fetch current user data
           const userResponse = await authAPI.getCurrentUser()
-          set({ user: userResponse })
+          set({ user: userResponse.user })
           
         } catch (error) {
           console.error('Auth initialization failed:', error)

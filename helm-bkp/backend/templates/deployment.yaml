@@ -28,16 +28,16 @@ spec:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
       initContainers:
         - name: db-migration
-          image: srikanta1219/grepmind-dashboard-backend:latest
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
-          command: ["npx", "prisma", "db", "push", "--schema=./prisma/schema.prisma", "--accept-data-loss"]
+          command: ["npx", "prisma", "db", "push", "--schema=./prisma/schema.prisma"]
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}        
+            {{- toYaml .Values.securityContext | nindent 12 }}
       containers:
         - name: backend
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

@@ -24,7 +24,10 @@
     "zustand": "^4.5.2",
     "react-query": "^3.39.3",
     "yaml": "^2.4.1",
-    "recharts": "^2.12.2"
+    "recharts": "^2.12.2",
+    "echarts": "^5.4.3",
+    "echarts-gl": "^2.0.9",
+    "echarts-for-react": "^3.0.2"
   },
   "devDependencies": {
     "@types/react": "^18.2.66",

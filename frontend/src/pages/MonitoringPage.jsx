@@ -21,14 +21,41 @@ import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import NamespaceSelector from '../components/NamespaceSelector';
 import { monitoringAPI } from '../services/api';
 import { useMonitoringData } from '../hooks/useMonitoringData';
+import ChartContainer from '../components/charts/ChartContainer';
+import FilterDropdowns from '../components/FilterDropdowns';
+import FilteredGraphs from '../components/FilteredGraphs';
+import TimeRangeSelector, { getTimeRangeInfo } from '../components/TimeRangeSelector';
 
 const MonitoringPage = () => {
   const { user } = useAuthStore();
   const [activeTab, setActiveTab] = useState('metrics');
   const [selectedNamespace, setSelectedNamespace] = useState('all');
   const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
-  const [showHistoricalData, setShowHistoricalData] = useState(false);
+  const [showHistoricalData, setShowHistoricalData] = useState(true); // Enable by default for charts
   const [enableRealTime, setEnableRealTime] = useState(true);
+  const [showGraphView, setShowGraphView] = useState(false);
+  
+  // NEW: Time series functionality
+  const [selectedTimeRange, setSelectedTimeRange] = useState('1h');
+  const [timeRangeInfo, setTimeRangeInfo] = useState(null);
+
+  // NEW: Time range change handler
+  const handleTimeRangeChange = (newRange, timeInfo) => {
+    setSelectedTimeRange(newRange);
+    setTimeRangeInfo(timeInfo);
+    
+    // Adjust refresh interval based on time range
+    if (newRange === '15m' || newRange === '1h') {
+      setRefreshInterval(30000); // 30 seconds for short ranges
+    } else if (newRange === '1d') {
+      setRefreshInterval(300000); // 5 minutes for daily
+    } else {
+      setRefreshInterval(600000); // 10 minutes for longer ranges
+    }
+    
+    // Force refresh with new time range
+    refreshData();
+  };
 
   // Use the enhanced monitoring hook with all 3 options implemented
   const {
@@ -54,6 +81,18 @@ const MonitoringPage = () => {
     maxHistoricalPoints: 100,
     persistState: true // Option 1: Prevent data loss on refresh
   });
+
+  // Debug: Log data for troubleshooting
+  useEffect(() => {
+    console.log('🔍 MonitoringPage Data Debug:', {
+      clusterMetrics,
+      historicalData,
+      wsConnected,
+      showGraphView,
+      enableHistoricalData: showHistoricalData,
+      enableWebSocket: enableRealTime
+    });
+  }, [clusterMetrics, historicalData, wsConnected, showGraphView, showHistoricalData, enableRealTime]);
 
   // Connection status indicator
   const getConnectionStatusInfo = () => {
@@ -135,6 +174,14 @@ const MonitoringPage = () => {
             onChange={setSelectedNamespace}
             includeAllOption={true}
           />
+          
+          {/* NEW: Time Range Selector */}
+          <TimeRangeSelector
+            selectedRange={selectedTimeRange}
+            onRangeChange={handleTimeRangeChange}
+            showLabel={false}
+            size="sm"
+          />
           <div className="flex items-center space-x-2 text-sm">
             <div className={`p-2 rounded-lg border ${connectionInfo.bgColor} border-opacity-30`}>
               <div className="flex items-center space-x-2">
@@ -192,19 +239,21 @@ const MonitoringPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard 
           title="CPU Usage" 
-          value={clusterMetrics ? `${clusterMetrics.resourceUsage.cpu.percentage}%` : 'Loading...'} 
-          trend={clusterMetrics ? `${clusterMetrics.resourceUsage.cpu.used}/${clusterMetrics.resourceUsage.cpu.total} cores` : ''} 
+          value={clusterMetrics?.resourceUsage?.cpu?.percentage !== undefined ? `${clusterMetrics.resourceUsage.cpu.percentage}%` : 'Loading...'} 
+          trend={clusterMetrics?.resourceUsage?.cpu ? `${clusterMetrics.resourceUsage.cpu.used}/${clusterMetrics.resourceUsage.cpu.total} cores` : ''} 
           icon={Cpu} 
-          color={clusterMetrics?.resourceUsage.cpu.percentage > 80 ? 'error' : clusterMetrics?.resourceUsage.cpu.percentage > 60 ? 'warning' : 'success'} 
+          color={clusterMetrics?.resourceUsage?.cpu?.percentage > 80 ? 'error' : clusterMetrics?.resourceUsage?.cpu?.percentage > 60 ? 'warning' : 'success'} 
           historical={historicalData?.cpu}
+          onGraphClick={() => setShowGraphView(true)}
         />
         <StatCard 
           title="Memory Usage" 
-          value={clusterMetrics ? `${clusterMetrics.resourceUsage.memory.percentage}%` : 'Loading...'} 
-          trend={clusterMetrics ? `${clusterMetrics.resourceUsage.memory.used}/${clusterMetrics.resourceUsage.memory.total} MB` : ''} 
+          value={clusterMetrics?.resourceUsage?.memory?.percentage !== undefined ? `${clusterMetrics.resourceUsage.memory.percentage}%` : 'Loading...'} 
+          trend={clusterMetrics?.resourceUsage?.memory ? `${clusterMetrics.resourceUsage.memory.used}/${clusterMetrics.resourceUsage.memory.total} MB` : ''} 
           icon={HardDrive} 
-          color={clusterMetrics?.resourceUsage.memory.percentage > 85 ? 'error' : clusterMetrics?.resourceUsage.memory.percentage > 70 ? 'warning' : 'success'} 
+          color={clusterMetrics?.resourceUsage?.memory?.percentage > 85 ? 'error' : clusterMetrics?.resourceUsage?.memory?.percentage > 70 ? 'warning' : 'success'} 
           historical={historicalData?.memory}
+          onGraphClick={() => setShowGraphView(true)}
         />
         <StatCard 
           title="Total Pods" 
@@ -213,6 +262,7 @@ const MonitoringPage = () => {
           icon={Network} 
           color="primary" 
           historical={historicalData?.pods}
+          onGraphClick={() => setShowGraphView(true)}
         />
         <StatCard 
           title="Cluster Nodes" 
@@ -221,6 +271,7 @@ const MonitoringPage = () => {
           icon={clusterMetrics?.cluster.nodes.notReady > 0 ? AlertTriangle : CheckCircle} 
           color={clusterMetrics?.cluster.nodes.notReady > 0 ? 'error' : 'success'} 
           historical={historicalData?.nodes}
+          onGraphClick={() => setShowGraphView(true)}
         />
       </div>
 
@@ -257,7 +308,7 @@ const MonitoringPage = () => {
           </div>
         ) : (
           <>
-            {activeTab === 'metrics' && <MetricsTab namespace={selectedNamespace} historicalData={showHistoricalData ? historicalData : null} />}
+            {activeTab === 'metrics' && <MetricsTab namespace={selectedNamespace} historicalData={showHistoricalData ? historicalData : null} selectedTimeRange={selectedTimeRange} />}
             {activeTab === 'events' && <EventsTab namespace={selectedNamespace} />}
             {activeTab === 'performance' && <PerformanceTab namespace={selectedNamespace} />}
             {activeTab === 'alerts' && <AlertsTab namespace={selectedNamespace} />}
@@ -265,12 +316,21 @@ const MonitoringPage = () => {
           </>
         )}
       </div>
+
+      {/* ECharts Graph View Modal */}
+      <ChartContainer
+        isVisible={showGraphView}
+        onClose={() => setShowGraphView(false)}
+        clusterMetrics={clusterMetrics}
+        historicalData={historicalData}
+        wsConnected={wsConnected}
+      />
     </motion.div>
   );
 };
 
 // Enhanced Stat Card Component with Historical Data
-const StatCard = ({ title, value, trend, icon: Icon, color, historical }) => {
+const StatCard = ({ title, value, trend, icon: Icon, color, historical, onGraphClick }) => {
   const colorClasses = {
     primary: 'text-primary-400 bg-primary-500/20 border-primary-500/30',
     success: 'text-success-400 bg-success-500/20 border-success-500/30',
@@ -305,20 +365,44 @@ const StatCard = ({ title, value, trend, icon: Icon, color, historical }) => {
             </div>
           )}
         </div>
-        <div className={`p-3 rounded-lg border ${colorClasses[color]}`}>
-          <Icon className="w-6 h-6" />
+        <div className="flex items-center space-x-2">
+          {/* Graph Icon Button */}
+          {onGraphClick && (
+            <button
+              onClick={onGraphClick}
+              className="p-2 rounded-lg border border-secondary-600/50 bg-secondary-700/30 hover:bg-secondary-600/50 transition-all duration-200 hover:scale-105 group"
+              title="Open Graph View"
+            >
+              <BarChart3 className="w-4 h-4 text-secondary-400 group-hover:text-secondary-200" />
+            </button>
+          )}
+          
+          {/* Main Metric Icon */}
+          <div className={`p-3 rounded-lg border ${colorClasses[color]}`}>
+            <Icon className="w-6 h-6" />
+          </div>
         </div>
       </div>
     </div>
   );
 };
 
-// Mini Sparkline Component for StatCard
+// Mini Sparkline Component for StatCard with NaN protection
 const MiniSparkline = ({ data, color }) => {
   if (!data || data.length === 0) return null;
 
-  const max = Math.max(...data);
-  const min = Math.min(...data);
+  // 🔥 FIX 1: Filter out invalid values (NaN, null, undefined, Infinity)
+  const validData = data.filter(point => 
+    typeof point === 'number' && 
+    !isNaN(point) && 
+    isFinite(point)
+  );
+  
+  if (validData.length === 0) return null;
+
+  // 🔥 FIX 2: Safe math operations with fallbacks
+  const max = Math.max(...validData);
+  const min = Math.min(...validData);
   const range = max - min;
 
   const colorClasses = {
@@ -331,10 +415,16 @@ const MiniSparkline = ({ data, color }) => {
   return (
     <svg width="50" height="20" className="inline-block">
       <path
-        d={data.map((point, index) => {
-          const x = (index / (data.length - 1)) * 48 + 1;
+        d={validData.map((point, index) => {
+          // 🔥 FIX 3: Ensure valid coordinates with fallbacks
+          const x = validData.length > 1 ? (index / (validData.length - 1)) * 48 + 1 : 25;
           const y = range > 0 ? (1 - (point - min) / range) * 18 + 1 : 10;
-          return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+          
+          // 🔥 FIX 4: Double-check coordinates are valid numbers
+          const safeX = isFinite(x) ? x : 25;
+          const safeY = isFinite(y) ? y : 10;
+          
+          return `${index === 0 ? 'M' : 'L'} ${safeX} ${safeY}`;
         }).join(' ')}
         fill="none"
         stroke="currentColor"
@@ -346,11 +436,14 @@ const MiniSparkline = ({ data, color }) => {
 };
 
 // Metrics Tab Component
-const MetricsTab = ({ namespace, historicalData }) => {
+const MetricsTab = ({ namespace, historicalData, selectedTimeRange }) => {
   const [nodeMetrics, setNodeMetrics] = useState([]);
   const [podMetrics, setPodMetrics] = useState([]);
   const [loading, setLoading] = useState(false);
   const [timeRange, setTimeRange] = useState('1h');
+  
+  // New state for filtering
+  const [activeFilters, setActiveFilters] = useState(null);
 
   useEffect(() => {
     fetchMetricsData();
@@ -376,8 +469,26 @@ const MetricsTab = ({ namespace, historicalData }) => {
     }
   };
 
+  const handleFilterChange = (filters) => {
+    setActiveFilters(filters);
+  };
+
   return (
     <div className="space-y-6">
+      {/* Filter Controls Section */}
+      <FilterDropdowns 
+        onFilterChange={handleFilterChange}
+        className="mb-6"
+      />
+
+      {/* Filtered Graphs Section */}
+      <FilteredGraphs 
+        filters={activeFilters}
+        timeRange={selectedTimeRange}
+        className="mb-8"
+      />
+
+      {/* Original Dashboard Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-xl font-semibold text-secondary-100">Resource Metrics Dashboard</h3>
         <div className="flex items-center space-x-3">
@@ -1137,4 +1248,5 @@ const TrendsTab = ({ namespace, historicalData }) => {
 };
 
 export default MonitoringPage;
+
 

@@ -1,6 +1,35 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { monitoringAPI } from '../services/api';
 
+// 🔥 WebSocket data sanitization helper
+const sanitizeWebSocketData = (data) => {
+  if (!data || typeof data !== 'object') return data;
+  
+  const sanitizeValue = (value) => {
+    if (typeof value === 'number') {
+      return (!isFinite(value) || isNaN(value)) ? 0 : value;
+    }
+    if (typeof value === 'object' && value !== null) {
+      return sanitizeObject(value);
+    }
+    return value;
+  };
+  
+  const sanitizeObject = (obj) => {
+    if (Array.isArray(obj)) {
+      return obj.map(sanitizeValue);
+    }
+    
+    const sanitized = {};
+    Object.keys(obj).forEach(key => {
+      sanitized[key] = sanitizeValue(obj[key]);
+    });
+    return sanitized;
+  };
+  
+  return sanitizeObject(data);
+};
+
 /**
  * Enhanced monitoring data hook with advanced features:
  * - Automatic refresh with configurable intervals
@@ -18,13 +47,31 @@ export const useMonitoringData = ({
   enableWebSocket = false,
   maxHistoricalPoints = 100
 } = {}) => {
-  // State management
-  const [clusterMetrics, setClusterMetrics] = useState(null);
+  // State management with persistence
+  const [clusterMetrics, setClusterMetrics] = useState(() => {
+    // Try to restore from localStorage on initial load
+    try {
+      const saved = localStorage.getItem('grepmind-cluster-metrics');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Validate the structure before using it
+        if (parsed && typeof parsed === 'object' && parsed.resourceUsage) {
+          return parsed;
+        }
+      }
+      return null;
+    } catch {
+      // Clear corrupted localStorage data
+      localStorage.removeItem('grepmind-cluster-metrics');
+      return null;
+    }
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connecting');
+  const [wsConnected, setWsConnected] = useState(false);
   const [historicalData, setHistoricalData] = useState({
     cpu: [],
     memory: [],
@@ -46,45 +93,78 @@ export const useMonitoringData = ({
     return Math.min(1000 * Math.pow(2, attempt), maxRetryDelay);
   };
 
-  // Add data to historical collection
+  // Add data to historical collection with NaN protection
   const addToHistoricalData = useCallback((metrics) => {
     if (!enableHistoricalData || !metrics) return;
     
     const timestamp = Date.now();
     
+    // 🔥 Helper function to validate numeric values
+    // Enhanced validation for historical data
+    const isValidNumber = (value) => {
+      return typeof value === 'number' && !isNaN(value) && isFinite(value) && value >= 0;
+    };
+    
     setHistoricalData(prev => {
       const newData = { ...prev };
       
-      // Add CPU data
+      // Add CPU data with validation
       if (metrics.resourceUsage?.cpu) {
-        newData.cpu = [...prev.cpu, {
-          timestamp,
-          value: metrics.resourceUsage.cpu.percentage
-        }].slice(-maxHistoricalPoints);
+        const cpuValue = metrics.resourceUsage.cpu.percentage;
+        if (isValidNumber(cpuValue)) {
+          newData.cpu = [...prev.cpu, {
+            timestamp,
+            value: Math.max(0, Math.min(100, cpuValue)), // Clamp between 0-100
+            percentage: Math.max(0, Math.min(100, cpuValue)),
+            used: metrics.resourceUsage.cpu.used || 0,
+            total: metrics.resourceUsage.cpu.total || 0
+          }].slice(-maxHistoricalPoints);
+        }
       }
       
-      // Add Memory data
+      // Add Memory data with validation
       if (metrics.resourceUsage?.memory) {
-        newData.memory = [...prev.memory, {
-          timestamp,
-          value: metrics.resourceUsage.memory.percentage
-        }].slice(-maxHistoricalPoints);
+        const memoryValue = metrics.resourceUsage.memory.percentage;
+        if (isValidNumber(memoryValue)) {
+          newData.memory = [...prev.memory, {
+            timestamp,
+            value: Math.max(0, Math.min(100, memoryValue)), // Clamp between 0-100
+            percentage: Math.max(0, Math.min(100, memoryValue)),
+            used: metrics.resourceUsage.memory.used || 0,
+            total: metrics.resourceUsage.memory.total || 0
+          }].slice(-maxHistoricalPoints);
+        }
       }
       
-      // Add Pods data
+      // Add Pods data with validation
       if (metrics.cluster?.pods) {
-        newData.pods = [...prev.pods, {
-          timestamp,
-          value: metrics.cluster.pods.total
-        }].slice(-maxHistoricalPoints);
+        const podsTotal = metrics.cluster.pods.total;
+        const podsRunning = metrics.cluster.pods.running || 0;
+        if (isValidNumber(podsTotal) && podsTotal >= 0) {
+          newData.pods = [...prev.pods, {
+            timestamp,
+            value: Math.floor(podsTotal), // Ensure integer
+            total: Math.floor(podsTotal),
+            running: Math.floor(podsRunning),
+            pending: Math.floor(metrics.cluster.pods.pending || 0),
+            failed: Math.floor(metrics.cluster.pods.failed || 0)
+          }].slice(-maxHistoricalPoints);
+        }
       }
       
-      // Add Nodes data
+      // Add Nodes data with validation
       if (metrics.cluster?.nodes) {
-        newData.nodes = [...prev.nodes, {
-          timestamp,
-          value: metrics.cluster.nodes.total
-        }].slice(-maxHistoricalPoints);
+        const nodesTotal = metrics.cluster.nodes.total;
+        const nodesReady = metrics.cluster.nodes.ready || 0;
+        if (isValidNumber(nodesTotal) && nodesTotal >= 0) {
+          newData.nodes = [...prev.nodes, {
+            timestamp,
+            value: Math.floor(nodesTotal), // Ensure integer
+            total: Math.floor(nodesTotal),
+            ready: Math.floor(nodesReady),
+            notReady: Math.floor(metrics.cluster.nodes.notReady || 0)
+          }].slice(-maxHistoricalPoints);
+        }
       }
       
       return newData;
@@ -93,15 +173,20 @@ export const useMonitoringData = ({
 
   // WebSocket connection management
   const connectWebSocket = useCallback(() => {
-    if (!enableWebSocket) return;
+    if (!enableWebSocket) {
+      console.log('🔌 WebSocket disabled via enableWebSocket flag');
+      return;
+    }
     
     try {
       const wsUrl = `${import.meta.env.VITE_WS_URL || 'ws://dashboard.grepmind.com'}/ws/monitoring`;
+      console.log('🔌 Attempting WebSocket connection to:', wsUrl);
       const ws = new WebSocket(wsUrl);
       
       ws.onopen = () => {
         console.log('✅ WebSocket connected');
         setConnectionStatus('connected');
+        setWsConnected(true);
         setRetryAttempt(0);
       };
       
@@ -110,9 +195,11 @@ export const useMonitoringData = ({
           const data = JSON.parse(event.data);
           
           if (data.type === 'metrics') {
-            setClusterMetrics(data.payload);
+            // 🔥 Sanitize WebSocket data to prevent NaN values
+            const sanitizedPayload = sanitizeWebSocketData(data.payload);
+            setClusterMetrics(sanitizedPayload);
             setLastUpdated(new Date());
-            addToHistoricalData(data.payload);
+            addToHistoricalData(sanitizedPayload);
             setError(null);
           }
         } catch (err) {
@@ -123,8 +210,9 @@ export const useMonitoringData = ({
       ws.onclose = (event) => {
         console.log('🔌 WebSocket disconnected:', event.code, event.reason);
         setConnectionStatus('disconnected');
+        setWsConnected(false);
         
-        // Attempt to reconnect if not intentional
+        // Attempt to reconnect if not intentional - but don't start HTTP polling
         if (event.code !== 1000 && mountedRef.current) {
           setTimeout(() => {
             if (mountedRef.current) {
@@ -140,12 +228,14 @@ export const useMonitoringData = ({
       ws.onerror = (error) => {
         console.error('❌ WebSocket error:', error);
         setConnectionStatus('disconnected');
+        setWsConnected(false);
       };
       
       wsRef.current = ws;
     } catch (error) {
       console.error('Failed to create WebSocket connection:', error);
       setConnectionStatus('disconnected');
+      setWsConnected(false);
     }
   }, [enableWebSocket, retryAttempt, addToHistoricalData]);
 
@@ -163,8 +253,11 @@ export const useMonitoringData = ({
       
       setError(null);
       
-      // If WebSocket is enabled, don't fetch via HTTP unless it's disconnected
-      if (enableWebSocket && wsRef.current?.readyState === WebSocket.OPEN) {
+      // Allow HTTP polling as fallback even with WebSocket (with debouncing)
+      if (enableWebSocket && wsRef.current?.readyState === WebSocket.OPEN && isAutoRefresh) {
+        // Skip auto-refresh if WebSocket is working, but allow manual refresh
+        setIsRefreshing(false);
+        setIsLoading(false);
         return;
       }
       
@@ -187,19 +280,19 @@ export const useMonitoringData = ({
         setError(error.message || 'Failed to fetch cluster metrics');
         setConnectionStatus('disconnected');
         
-        // Don't clear existing data on refresh errors
-        if (!isAutoRefresh) {
-          setClusterMetrics(null);
-        }
-        
-        // Retry logic for failed requests
-        if (retryAttempt < retryCount) {
+        // Retry logic for failed requests - but prevent infinite loops
+        if (retryAttempt < retryCount && !isAutoRefresh) {
           const delay = getRetryDelay(retryAttempt);
+          
+          // Clear any existing retry timeout to prevent multiple retries
+          if (retryTimeoutRef.current) {
+            clearTimeout(retryTimeoutRef.current);
+          }
           
           retryTimeoutRef.current = setTimeout(() => {
             if (mountedRef.current) {
               setRetryAttempt(prev => prev + 1);
-              fetchMetricsData(isAutoRefresh);
+              fetchMetricsData(false); // Force manual retry, not auto-refresh
             }
           }, delay);
         }
@@ -210,33 +303,84 @@ export const useMonitoringData = ({
         setIsRefreshing(false);
       }
     }
-  }, [retryAttempt, retryCount, enableWebSocket, addToHistoricalData]);
+  }, [enableWebSocket]);
 
   // Manual refresh function
-  const refreshData = useCallback(() => {
-    fetchMetricsData(false);
-  }, [fetchMetricsData]);
+  const refreshData = useCallback(async () => {
+    try {
+      setIsRefreshing(true);
+      setError(null);
+      setConnectionStatus('connecting');
+      
+      const data = await monitoringAPI.getMetricsOverview();
+      
+      if (mountedRef.current && data) {
+        setClusterMetrics(data);
+        setLastUpdated(new Date());
+        setConnectionStatus('connected');
+        setRetryAttempt(0);
+        addToHistoricalData(data);
+      }
+    } catch (error) {
+      console.error('Manual refresh error:', error);
+      if (mountedRef.current) {
+        setError(error.message || 'Failed to refresh data');
+        setConnectionStatus('disconnected');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setIsRefreshing(false);
+      }
+    }
+  }, []);
 
-  // Set auto-refresh interval
-  const setAutoRefreshInterval = useCallback((interval) => {
-    // Clear existing interval
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+  // Reset state function for debugging
+  const resetState = useCallback(async () => {
+    console.log('🔄 Resetting monitoring state...');
+    setClusterMetrics(null);
+    setHistoricalData({ cpu: [], memory: [], pods: [], nodes: [] });
+    setError(null);
+    setRetryAttempt(0);
+    localStorage.removeItem('grepmind-cluster-metrics');
     
-    // Set new interval if autoRefresh is enabled and interval > 0
-    if (autoRefresh && interval > 0) {
-      intervalRef.current = setInterval(() => {
-        fetchMetricsData(true);
-      }, interval);
+    // Force fresh data fetch
+    try {
+      setIsLoading(true);
+      const data = await monitoringAPI.getMetricsOverview();
+      
+      if (mountedRef.current && data) {
+        setClusterMetrics(data);
+        setLastUpdated(new Date());
+        setConnectionStatus('connected');
+        addToHistoricalData(data);
+      }
+    } catch (error) {
+      console.error('Reset state fetch error:', error);
+      if (mountedRef.current) {
+        setError(error.message || 'Failed to fetch data after reset');
+      }
+    } finally {
+      if (mountedRef.current) {
+        setIsLoading(false);
+      }
     }
-  }, [autoRefresh, fetchMetricsData]);
+  }, []);
+
+  // Clear error function
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
 
   // Initialize WebSocket connection if enabled
   useEffect(() => {
+    console.log('🔌 WebSocket useEffect triggered. enableWebSocket:', enableWebSocket);
     if (enableWebSocket) {
+      console.log('🔌 Starting WebSocket connection...');
       connectWebSocket();
+    } else {
+      console.log('🔌 WebSocket disabled, will use HTTP polling');
+      setWsConnected(false);
+      setConnectionStatus('polling');
     }
     
     return () => {
@@ -246,21 +390,109 @@ export const useMonitoringData = ({
     };
   }, [enableWebSocket, connectWebSocket]);
 
-  // Set up auto-refresh interval
+  // Persist cluster metrics to localStorage
   useEffect(() => {
-    setAutoRefreshInterval(refreshInterval);
+    if (clusterMetrics) {
+      try {
+        localStorage.setItem('grepmind-cluster-metrics', JSON.stringify(clusterMetrics));
+      } catch (error) {
+        console.warn('Failed to save metrics to localStorage:', error);
+      }
+    }
+  }, [clusterMetrics]);
+
+  // Set auto-refresh interval with rate limiting
+  useEffect(() => {
+    // Clear existing interval
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    
+    // Set new interval if autoRefresh is enabled and interval > 0
+    if (autoRefresh && refreshInterval > 0) {
+      // Minimum interval of 10 seconds to prevent excessive requests
+      const safeInterval = Math.max(refreshInterval, 10000);
+      
+      intervalRef.current = setInterval(async () => {
+        // Rate limiting: only fetch if WebSocket is not active
+        if (!enableWebSocket || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+          try {
+            setIsRefreshing(true);
+            setError(null);
+            
+            const data = await monitoringAPI.getMetricsOverview();
+            
+            if (mountedRef.current && data) {
+              setClusterMetrics(data);
+              setLastUpdated(new Date());
+              setConnectionStatus('connected');
+              setRetryAttempt(0);
+              addToHistoricalData(data);
+            }
+          } catch (error) {
+            console.error('Auto-refresh error:', error);
+            if (mountedRef.current) {
+              setError(error.message || 'Failed to refresh data');
+              setConnectionStatus('disconnected');
+            }
+          } finally {
+            if (mountedRef.current) {
+              setIsRefreshing(false);
+            }
+          }
+        }
+      }, safeInterval);
+    }
     
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-  }, [refreshInterval, setAutoRefreshInterval]);
+  }, [autoRefresh, refreshInterval, enableWebSocket]); // Removed addToHistoricalData dependency to prevent loops
 
-  // Initial data fetch
+  // Initial data fetch - Using a stable reference to avoid infinite loops
   useEffect(() => {
-    fetchMetricsData(false);
-  }, []);
+    let isMounted = true;
+    
+    const initialFetch = async () => {
+      if (!isMounted) return;
+      
+      try {
+        setIsLoading(true);
+        setError(null);
+        setConnectionStatus('connecting');
+        
+        const data = await monitoringAPI.getMetricsOverview();
+        
+        if (isMounted && data) {
+          setClusterMetrics(data);
+          setLastUpdated(new Date());
+          setConnectionStatus('connected');
+          setRetryAttempt(0);
+          addToHistoricalData(data);
+        }
+      } catch (error) {
+        console.error('Initial fetch error:', error);
+        if (isMounted) {
+          setError(error.message || 'Failed to fetch cluster metrics');
+          setConnectionStatus('disconnected');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+    
+    initialFetch();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Empty dependency array is now safe
 
   // Cleanup on unmount
   useEffect(() => {
@@ -295,14 +527,17 @@ export const useMonitoringData = ({
     // Error and connection status
     error,
     connectionStatus,
+    wsConnected,
     
     // Metadata
     lastUpdated,
     retryAttempt,
+    reconnectAttempts: retryAttempt, // Alias for compatibility
     
     // Actions
     refreshData,
-    setAutoRefreshInterval,
+    resetState,
+    clearError,
     
     // WebSocket controls
     reconnectWebSocket: connectWebSocket
@@ -310,3 +545,4 @@ export const useMonitoringData = ({
 };
 
 export default useMonitoringData;
+
